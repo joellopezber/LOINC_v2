@@ -1,0 +1,310 @@
+<!-- Config Modal -->
+<div class="config-modal" id="configModal">
+    <div class="config-modal-content">
+        <!-- Header -->
+        <div class="modal-header">
+            <div class="header-content">
+                <h2>Configuración</h2>
+                <button class="close-button" id="closeConfigModal">
+                    <svg width="24" height="24" viewBox="0 0 24 24">
+                        <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" fill="currentColor"/>
+                    </svg>
+                </button>
+            </div>
+        </div>
+
+        <!-- Navigation -->
+        <div class="modal-nav">
+            <button class="nav-item active" data-section="search">
+                <span class="material-icons">search</span>
+                <span>Búsqueda</span>
+            </button>
+            <button class="nav-item" data-section="sql">
+                <span class="material-icons">storage</span>
+                <span>SQL</span>
+            </button>
+            <button class="nav-item" data-section="config">
+                <span class="material-icons">settings</span>
+                <span>Config</span>
+            </button>
+        </div>
+
+        <!-- Body -->
+        <div class="modal-body">
+            <!-- Search Section -->
+            <div class="config-section" id="searchSection">
+                <div class="option-group">
+                    <div class="radio-option">
+                        <div class="radio-header">
+                            <input type="radio" name="searchMode" value="multi_match" id="multiMatch" checked>
+                            <div class="header-content">
+                                <h3>Multi Match</h3>
+                                <small class="info-text">Búsqueda directa en la base de datos utilizando coincidencia múltiple</small>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="radio-option">
+                        <div class="radio-header">
+                            <input type="radio" name="searchMode" value="openai" id="openai">
+                            <div class="header-content">
+                                <h3>OpenAI</h3>
+                                <small class="info-text">Búsqueda asistida por IA utilizando OpenAI</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="option-group">
+                    <div class="radio-option">
+                        <div class="radio-header">
+                            <input type="radio" name="dbMode" value="sql" id="sqlMode" checked>
+                            <div class="header-content">
+                                <h3>SQL</h3>
+                                <small class="info-text">Búsqueda en base de datos SQL para resultados precisos</small>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="radio-option">
+                        <div class="radio-header">
+                            <input type="radio" name="dbMode" value="elastic" id="elasticMode">
+                            <div class="header-content">
+                                <h3>Elasticsearch</h3>
+                                <small class="info-text">Búsqueda avanzada con Elasticsearch para mayor flexibilidad</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="openaiOptions" class="option-group" style="display: none;">
+                    <div class="section-header">
+                        <h3>Opciones de OpenAI</h3>
+                        <small class="info-text">Configura las opciones de búsqueda con OpenAI</small>
+                    </div>
+                    <div class="checkbox-wrapper">
+                        <input type="checkbox" name="useOriginalTerm" id="useOriginalTerm" checked>
+                        <div class="checkbox-content">
+                            <label class="checkbox-label" for="useOriginalTerm">Usar término original</label>
+                            <div class="checkbox-description">Incluir el término de búsqueda original</div>
+                        </div>
+                    </div>
+                    <div class="checkbox-wrapper">
+                        <input type="checkbox" name="useEnglishTerm" id="useEnglishTerm">
+                        <div class="checkbox-content">
+                            <label class="checkbox-label" for="useEnglishTerm">Usar término en inglés</label>
+                            <div class="checkbox-description">Traducir y usar el término en inglés</div>
+                        </div>
+                    </div>
+                    <div class="checkbox-wrapper">
+                        <input type="checkbox" name="useRelatedTerms" id="useRelatedTerms">
+                        <div class="checkbox-content">
+                            <label class="checkbox-label" for="useRelatedTerms">Usar términos relacionados</label>
+                            <div class="checkbox-description">Incluir términos relacionados en la búsqueda</div>
+                        </div>
+                    </div>
+                    <div class="checkbox-wrapper">
+                        <input type="checkbox" name="useTestTypes" id="useTestTypes">
+                        <div class="checkbox-content">
+                            <label class="checkbox-label" for="useTestTypes">Usar tipos de prueba</label>
+                            <div class="checkbox-description">Incluir tipos de prueba relacionados</div>
+                        </div>
+                    </div>
+                    <div class="checkbox-wrapper">
+                        <input type="checkbox" name="useKeywords" id="useKeywords">
+                        <div class="checkbox-content">
+                            <label class="checkbox-label" for="useKeywords">Usar palabras clave</label>
+                            <div class="checkbox-description">Incluir palabras clave relacionadas</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Elastic Section -->
+            <div class="config-section" id="elasticSection">
+                <div class="option-group">
+                    <div class="section-header">
+                        <h3>Límites de Búsqueda</h3>
+                        <small class="info-text">Configura los límites máximos de resultados</small>
+                    </div>
+                    <div class="checkbox-wrapper">
+                        <div class="checkbox-content">
+                            <div class="param-controls">
+                                <label class="checkbox-label">Resultados totales</label>
+                                <div class="checkbox-description">Número máximo de resultados a mostrar</div>
+                                <div class="slider-control">
+                                    <input type="range" id="maxTotalResults" min="1" max="100" value="50" class="form-control">
+                                    <div class="value-container">50 resultados</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="checkbox-wrapper">
+                        <div class="checkbox-content">
+                            <div class="param-controls">
+                                <label class="checkbox-label">Resultados por palabra clave</label>
+                                <div class="checkbox-description">Número máximo de resultados por cada palabra clave</div>
+                                <div class="slider-control">
+                                    <input type="range" id="maxPerKeyword" min="1" max="50" value="10" class="form-control">
+                                    <div class="value-container">10 resultados</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="option-group">
+                    <div class="section-header">
+                        <h3>Tipos de Búsqueda</h3>
+                        <small class="info-text">Configura los diferentes tipos de búsqueda</small>
+                    </div>
+                    <div class="checkbox-wrapper">
+                        <input type="checkbox" id="exactEnabled" checked>
+                        <div class="checkbox-content">
+                            <label class="checkbox-label" for="exactEnabled">Búsqueda Exacta</label>
+                            <div class="checkbox-description">Coincidencia exacta de términos</div>
+                            <div class="param-controls">
+                                <div class="slider-control">
+                                    <label class="slider-label">Prioridad:</label>
+                                    <input type="range" id="exactPriority" min="1" max="10" value="10" class="form-control">
+                                    <div class="value-container">10</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="checkbox-wrapper">
+                        <input type="checkbox" id="fuzzyEnabled" checked>
+                        <div class="checkbox-content">
+                            <label class="checkbox-label" for="fuzzyEnabled">Búsqueda Difusa</label>
+                            <div class="checkbox-description">Permite errores y variaciones en los términos</div>
+                            <div class="param-controls">
+                                <div class="slider-control">
+                                    <label class="slider-label">Tolerancia:</label>
+                                    <input type="range" id="fuzzyTolerance" min="1" max="5" value="2" class="form-control">
+                                    <div class="value-container">2</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="checkbox-wrapper">
+                        <input type="checkbox" id="smartEnabled" checked>
+                        <div class="checkbox-content">
+                            <label class="checkbox-label" for="smartEnabled">Búsqueda Inteligente</label>
+                            <div class="checkbox-description">Utiliza análisis semántico y contextual</div>
+                            <div class="param-controls">
+                                <div class="slider-control">
+                                    <label class="slider-label">Precisión:</label>
+                                    <input type="range" id="smartPrecision" min="1" max="10" value="7" class="form-control">
+                                    <div class="value-container">7</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Config Section -->
+            <div class="config-section" id="configSection">
+                <div class="option-group">
+                    <div class="section-header">
+                        <h3>Gestión de Datos</h3>
+                        <small class="info-text">Administra los datos y la configuración del sistema</small>
+                    </div>
+                    <div class="checkbox-wrapper">
+                        <div class="checkbox-content">
+                            <label class="checkbox-label">Eliminar Ontología</label>
+                            <div class="checkbox-description">Elimina todos los datos de ontología almacenados</div>
+                            <div class="param-controls">
+                                <button class="btn-action warning" id="deleteOntology">
+                                    <span class="material-icons">delete_forever</span>
+                                    Eliminar Ontología
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="checkbox-wrapper">
+                        <div class="checkbox-content">
+                            <label class="checkbox-label">Restaurar Valores</label>
+                            <div class="checkbox-description">Restablece todas las configuraciones a sus valores predeterminados</div>
+                            <div class="param-controls">
+                                <button class="btn-action warning" id="restoreDefaults">
+                                    <span class="material-icons">restore</span>
+                                    Restaurar Valores
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- SQL Section -->
+            <div class="config-section" id="sqlSection">
+                <div class="option-group">
+                    <div class="section-header">
+                        <div class="header-row">
+                            <div class="header-title">
+                                <h3>Límites de Búsqueda</h3>
+                                <small class="info-text">Configura los límites generales de la búsqueda SQL</small>
+                            </div>
+                            <div class="header-controls">
+                                <input type="number" name="sqlMaxTotal" min="1" max="1000" value="150" class="form-control">
+                                <span class="value-label">resultados</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="param-controls">
+                        <div class="slider-control">
+                            <input type="range" id="maxTotalResults" min="1" max="100" value="50" class="form-control">
+                            <div class="value-container">50%</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="option-group">
+                    <div class="section-header">
+                        <div class="header-row">
+                            <div class="header-title">
+                                <h3>Tipos de Búsqueda</h3>
+                                <small class="info-text">Configura los diferentes tipos de búsqueda</small>
+                            </div>
+                            <div class="header-controls">
+                                <input type="checkbox" id="exactEnabled" checked>
+                                <label for="exactEnabled">Activar</label>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="param-controls">
+                        <div class="slider-control">
+                            <label class="slider-label">Prioridad:</label>
+                            <input type="range" id="exactPriority" min="1" max="10" value="10" class="form-control">
+                            <div class="value-container">10%</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="option-group">
+                    <div class="section-header">
+                        <h3>Gestión de Caché</h3>
+                        <small class="info-text">Administra el almacenamiento en caché de resultados</small>
+                    </div>
+                    <div class="checkbox-wrapper">
+                        <div class="checkbox-content">
+                            <label class="checkbox-label">Borrar Caché</label>
+                            <div class="checkbox-description">Esta acción eliminará todos los resultados almacenados en caché</div>
+                            <div class="param-controls">
+                                <button id="clearCacheButton" class="btn-action warning">
+                                    <span class="material-icons">delete_sweep</span>
+                                    Borrar Caché Completamente
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="modal-footer">
+            <button class="btn-close" id="cancelConfig">Cancelar</button>
+            <button class="btn-save" id="saveConfig">Guardar</button>
+        </div>
+    </div>
+</div> 

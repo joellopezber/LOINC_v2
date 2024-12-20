@@ -1,0 +1,232 @@
+# LOINC Search - Reglas y Guías de Desarrollo
+
+## Arquitectura General
+
+- Frontend: JavaScript vanilla + CSS modular (sin dependencias de Node.js)
+- Backend: Python + Flask
+- Base de datos: SQL + Elasticsearch
+- Integración IA: Prompts predefinidos para OpenAI, Anthropic, Google AI
+- Almacenamiento Local: LocalStorage para configuración y estado
+
+## Gestión de Configuración
+
+### LocalStorage
+La configuración del sistema se almacena en localStorage con la siguiente estructura:
+
+```javascript
+// Clave: 'searchConfig'
+{
+    search: {
+        ontologyMode: 'multi_match' | 'openai',
+        dbMode: 'sql' | 'elastic',
+        openai: {
+            useOriginalTerm: boolean,
+            useEnglishTerm: boolean,
+            useRelatedTerms: boolean,
+            useTestTypes: boolean,
+            useLoincCodes: boolean,
+            useKeywords: boolean
+        }
+    },
+    elastic: {
+        limits: {
+            maxTotal: number,
+            maxPerKeyword: number
+        },
+        searchTypes: {
+            exact: {
+                enabled: boolean,
+                priority: number
+            },
+            fuzzy: {
+                enabled: boolean,
+                tolerance: number
+            },
+            smart: {
+                enabled: boolean,
+                precision: number
+            }
+        }
+    },
+    sql: {
+        maxTotal: number,
+        maxPerKeyword: number,
+        maxKeywords: number,
+        strictMode: boolean
+    },
+    loinc: {
+        filePath: string,
+        lastUpdate: string
+    },
+    agents: [
+        {
+            id: string,
+            name: string,
+            enabled: boolean,
+            provider: string,
+            model: string,
+            summary: string,
+            promptPath: string
+        }
+    ]
+}
+
+// Clave: 'apiKeys'
+{
+    openai: string,
+    anthropic: string,
+    google: string
+}
+```
+
+### Gestión de Estado
+- Configuración persistente en localStorage
+- API keys almacenadas de forma segura
+- Historial de búsqueda local
+- Preferencias de usuario
+
+## Reglas Principales
+
+### 1. Estructura del Código
+
+```
+LOINC_v2/
+├── frontend/
+│   ├── static/
+│   │   ├── css/
+│   │   │   ├── components/
+│   │   │   └── styles.css
+│   │   └── js/
+│   │       ├── components/
+│   │       ├── services/
+│   │       └── utils/
+│   ├── templates/
+│   │   └── components/
+│   └── docs/
+├── backend/
+│   ├── api/
+│   ├── core/
+│   ├── processing/
+│   ├── routes/
+│   ├── utils/
+│   ├── prompts/
+│   │   ├── search/
+│   │   └── analysis/
+│   └── docs/
+├── config/
+├── data/
+└── tests/
+```
+
+### 2. Estándares de Código
+
+Frontend:
+- Usar ES6+ features
+- Componentes modulares
+- BEM para CSS
+- Nombres en español (camelCase)
+
+Backend:
+- PEP 8
+- Type hints
+- Docstrings obligatorios
+- Nombres en inglés (snake_case)
+
+### 3. Flujo de Trabajo
+
+1. Crear rama feature/bugfix
+2. Seguir guías de estilo
+3. Documentar cambios
+4. Testing local
+5. Pull Request
+
+### 4. Documentación
+
+Documentación completa disponible en:
+- Frontend: `/frontend/docs/FRONTEND.md`
+- Backend: `/backend/docs/BACKEND.md`
+- General: `/docs/README.md`
+
+### 5. Reglas de Commit
+
+- Commits en español
+- Formato: `tipo(alcance): descripción`
+- Tipos: feat, fix, docs, style, refactor, test, chore
+
+### 6. Testing
+
+- Frontend: Tests manuales UI
+- Backend: pytest
+- Coverage mínimo: 80%
+
+### 7. Configuración
+
+- Usar variables de entorno
+- No hardcodear credenciales
+- Configuración en archivos JSON/YAML
+- Persistencia en localStorage
+
+### 8. Seguridad
+
+- Sanitizar inputs
+- Validar tipos
+- Manejar errores
+- Rotar API keys
+- Encriptar datos sensibles en localStorage
+
+## Normas Importantes
+
+1. **Modularidad**:
+   - Un componente, una responsabilidad
+   - Separar lógica de presentación
+   - Reutilizar código común
+
+2. **Performance**:
+   - Optimizar queries
+   - Lazy loading
+   - Caché cuando sea posible
+   - Gestión eficiente del localStorage
+
+3. **Mantenibilidad**:
+   - Código autodocumentado
+   - Logging consistente
+   - Manejo de errores robusto
+   - Validación de datos en localStorage
+
+4. **Accesibilidad**:
+   - Diseño responsive
+   - ARIA labels
+   - Soporte de teclado
+
+## Servicios y Utilidades
+
+### Storage Service (storage.js)
+- Gestión centralizada del localStorage
+- Métodos para CRUD de configuración
+- Manejo de API keys
+- Historial de búsqueda
+
+### Config Modal (config-modal.js)
+- Interfaz de configuración
+- Persistencia automática
+- Validación de datos
+- Gestión de agentes
+
+## Herramientas Recomendadas
+
+- VS Code con ESLint
+- Python: flake8, black
+- Git hooks para linting
+- Chrome DevTools
+- Redux DevTools para depuración de estado
+
+## Contacto
+
+Para dudas o sugerencias:
+- Documentación Wiki
+- Issues en GitHub
+- Email del equipo
+
+## Nota
+
+Este archivo es una guía rápida. Para información detallada, consultar la documentación completa en `/docs/README.md`. 

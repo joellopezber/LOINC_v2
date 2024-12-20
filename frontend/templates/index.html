@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LOINC Search</title>
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/styles.css">
+    <link rel="stylesheet" href="/static/css/components/search.css">
+    <link rel="stylesheet" href="/static/css/components/config-modal.css">
+</head>
+<body>
+    <header>
+        <button class="config-button" type="button" aria-label="Configuración">
+            <span class="material-icons">settings</span>
+        </button>
+    </header>
+
+    <main>
+        <div class="logo">
+            <h1 class="logo-text">
+                <span>L</span><span>o</span><span>o</span><span>i</span><span>n</span><span>c</span>
+            </h1>
+        </div>
+        <div class="search-container">
+            <div class="search-box">
+                <div class="search-icon">
+                    <span class="material-icons">search</span>
+                </div>
+                <input type="text" class="search-input" placeholder="Buscar término médico..." autocomplete="off" maxlength="2048">
+                <div class="upload-button">
+                    <span class="material-icons">upload_file</span>
+                </div>
+            </div>
+            <div class="search-buttons">
+                <button class="search-button">Buscar con LOOINC</button>
+            </div>
+        </div>
+    </main>
+
+    <footer>
+        <p>LOINC Search Tool - v2.0</p>
+    </footer>
+
+    <!-- Modal Container -->
+    <div id="modalContainer"></div>
+
+    <!-- Scripts -->
+    <script src="/static/js/utils/storage.js" type="module"></script>
+    <script type="module" src="/static/js/app.js"></script>
+</body>
+</html> 
