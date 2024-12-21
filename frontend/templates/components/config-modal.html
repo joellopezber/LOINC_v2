@@ -36,89 +36,95 @@
             <!-- Search Section -->
             <div class="config-section active" id="searchSection">
                 <div class="option-group">
-                    <h3>Modo de Búsqueda</h3>
+                    <div class="section-header">
+                        <h3>Modo de Búsqueda</h3>
+                        <small class="info-text">Selecciona el método de búsqueda para los términos médicos</small>
+                    </div>
                     <div class="radio-group">
-                        <label class="radio-option">
+                        <label class="checkbox-option">
                             <input type="radio" name="searchMode" value="multi_match" checked>
-                            <div class="radio-content">
-                                <div class="radio-title">Multi Match</div>
-                                <div class="radio-description">Búsqueda directa en la base de datos utilizando coincidencia múltiple</div>
+                            <div class="checkbox-content">
+                                <div class="checkbox-title">Multi Match</div>
+                                <div class="checkbox-description">Búsqueda directa en la base de datos utilizando coincidencia múltiple</div>
                             </div>
                         </label>
-                        <label class="radio-option">
+                        <label class="checkbox-option">
                             <input type="radio" name="searchMode" value="openai">
-                            <div class="radio-content">
-                                <div class="radio-title">OpenAI</div>
-                                <div class="radio-description">Búsqueda asistida por IA utilizando OpenAI</div>
+                            <div class="checkbox-content">
+                                <div class="checkbox-title">OpenAI</div>
+                                <div class="checkbox-description">Búsqueda asistida por IA utilizando OpenAI</div>
+                                <!-- OpenAI Options -->
+                                <div id="openaiOptions" class="checkbox-group" style="display: none;">
+                                    <div class="checkbox-column">
+                                        <label class="checkbox-option">
+                                            <input type="checkbox" name="useOriginalTerm" checked>
+                                            <div class="checkbox-content">
+                                                <div class="checkbox-title">Usar término original</div>
+                                                <div class="checkbox-description">Incluir el término de búsqueda original</div>
+                                            </div>
+                                        </label>
+                                        <label class="checkbox-option">
+                                            <input type="checkbox" name="useEnglishTerm" checked>
+                                            <div class="checkbox-content">
+                                                <div class="checkbox-title">Usar término en inglés</div>
+                                                <div class="checkbox-description">Traducir y usar el término en inglés</div>
+                                            </div>
+                                        </label>
+                                        <label class="checkbox-option">
+                                            <input type="checkbox" name="useRelatedTerms" checked>
+                                            <div class="checkbox-content">
+                                                <div class="checkbox-title">Usar términos relacionados</div>
+                                                <div class="checkbox-description">Incluir términos relacionados en la búsqueda</div>
+                                            </div>
+                                        </label>
+                                    </div>
+                                    <div class="checkbox-column">
+                                        <label class="checkbox-option">
+                                            <input type="checkbox" name="useTestTypes" checked>
+                                            <div class="checkbox-content">
+                                                <div class="checkbox-title">Usar tipos de prueba</div>
+                                                <div class="checkbox-description">Incluir tipos de prueba relacionados</div>
+                                            </div>
+                                        </label>
+                                        <label class="checkbox-option">
+                                            <input type="checkbox" name="useLoincCodes" checked>
+                                            <div class="checkbox-content">
+                                                <div class="checkbox-title">Usar códigos LOINC</div>
+                                                <div class="checkbox-description">Incluir códigos LOINC relacionados</div>
+                                            </div>
+                                        </label>
+                                        <label class="checkbox-option">
+                                            <input type="checkbox" name="useKeywords" checked>
+                                            <div class="checkbox-content">
+                                                <div class="checkbox-title">Usar palabras clave</div>
+                                                <div class="checkbox-description">Incluir palabras clave relacionadas</div>
+                                            </div>
+                                        </label>
+                                    </div>
+                                </div>
                             </div>
                         </label>
                     </div>
                 </div>
 
                 <div class="option-group">
-                    <h3>Base de Datos</h3>
-                    <div class="radio-group">
-                        <label class="radio-option">
-                            <input type="radio" name="dbMode" value="sql" checked>
-                            <div class="radio-content">
-                                <div class="radio-title">SQL</div>
-                                <div class="radio-description">Búsqueda en base de datos SQL para resultados precisos</div>
-                            </div>
-                        </label>
-                        <label class="radio-option">
-                            <input type="radio" name="dbMode" value="elastic">
-                            <div class="radio-content">
-                                <div class="radio-title">Elasticsearch</div>
-                                <div class="radio-description">Búsqueda avanzada con Elasticsearch para mayor flexibilidad</div>
-                            </div>
-                        </label>
+                    <div class="section-header">
+                        <h3>Base de Datos</h3>
+                        <small class="info-text">Elige el motor de base de datos para realizar las búsquedas</small>
                     </div>
-                </div>
-
-                <!-- OpenAI Options -->
-                <div id="openaiOptions" class="option-group" style="display: none;">
-                    <h3>Opciones de OpenAI</h3>
-                    <div class="checkbox-group">
+                    <div class="radio-group">
                         <label class="checkbox-option">
-                            <input type="checkbox" name="useOriginalTerm" checked>
+                            <input type="radio" name="dbMode" value="sql" checked>
                             <div class="checkbox-content">
-                                <div class="checkbox-title">Usar término original</div>
-                                <div class="checkbox-description">Incluir el término de búsqueda original</div>
+                                <div class="checkbox-title">SQL</div>
+                                <div class="checkbox-description">Búsqueda en base de datos SQL para resultados precisos</div>
                             </div>
                         </label>
                         <label class="checkbox-option">
-                            <input type="checkbox" name="useEnglishTerm" checked>
+                            <input type="radio" name="dbMode" value="elastic">
                             <div class="checkbox-content">
-                                <div class="checkbox-title">Usar término en inglés</div>
-                                <div class="checkbox-description">Traducir y usar el término en inglés</div>
-                            </div>
-                        </label>
-                        <label class="checkbox-option">
-                            <input type="checkbox" name="useRelatedTerms" checked>
-                            <div class="checkbox-content">
-                                <div class="checkbox-title">Usar términos relacionados</div>
-                                <div class="checkbox-description">Incluir términos relacionados en la búsqueda</div>
-                            </div>
-                        </label>
-                        <label class="checkbox-option">
-                            <input type="checkbox" name="useTestTypes" checked>
-                            <div class="checkbox-content">
-                                <div class="checkbox-title">Usar tipos de prueba</div>
-                                <div class="checkbox-description">Incluir tipos de prueba relacionados</div>
-                            </div>
-                        </label>
-                        <label class="checkbox-option">
-                            <input type="checkbox" name="useLoincCodes" checked>
-                            <div class="checkbox-content">
-                                <div class="checkbox-title">Usar códigos LOINC</div>
-                                <div class="checkbox-description">Incluir códigos LOINC relacionados</div>
-                            </div>
-                        </label>
-                        <label class="checkbox-option">
-                            <input type="checkbox" name="useKeywords" checked>
-                            <div class="checkbox-content">
-                                <div class="checkbox-title">Usar palabras clave</div>
-                                <div class="checkbox-description">Incluir palabras clave relacionadas</div>
+                                <div class="checkbox-title">Elasticsearch</div>
+                                <div class="checkbox-description">Búsqueda avanzada con Elasticsearch para mayor flexibilidad</div>
                             </div>
                         </label>
                     </div>
@@ -133,10 +139,10 @@
                         <small class="info-text">Configura los límites generales de la búsqueda SQL</small>
                     </div>
                     <div class="radio-group">
-                        <label class="radio-option">
-                            <div class="radio-content">
-                                <div class="radio-title">Límite de resultados</div>
-                                <div class="radio-description">Número máximo de resultados a mostrar</div>
+                        <label class="checkbox-option">
+                            <div class="checkbox-content">
+                                <div class="checkbox-title">Límite de resultados</div>
+                                <div class="checkbox-description">Número máximo de resultados a mostrar</div>
                                 <div class="input-number-container">
                                     <input type="number" name="sqlMaxTotal" min="1" max="1000" value="150">
                                     <span class="unit">resultados</span>
@@ -152,18 +158,18 @@
                         <small class="info-text">Configura la precisión de la búsqueda SQL</small>
                     </div>
                     <div class="radio-group">
-                        <label class="radio-option">
+                        <label class="checkbox-option">
                             <input type="radio" name="sqlMode" value="strict" checked>
-                            <div class="radio-content">
-                                <div class="radio-title">Modo Estricto</div>
-                                <div class="radio-description">Activa la búsqueda de coincidencias exactas para resultados más precisos</div>
+                            <div class="checkbox-content">
+                                <div class="checkbox-title">Modo Estricto</div>
+                                <div class="checkbox-description">Activa la búsqueda de coincidencias exactas para resultados más precisos</div>
                             </div>
                         </label>
-                        <label class="radio-option">
+                        <label class="checkbox-option">
                             <input type="radio" name="sqlMode" value="flexible">
-                            <div class="radio-content">
-                                <div class="radio-title">Modo Flexible</div>
-                                <div class="radio-description">Permite variaciones y coincidencias parciales en las búsquedas</div>
+                            <div class="checkbox-content">
+                                <div class="checkbox-title">Modo Flexible</div>
+                                <div class="checkbox-description">Permite variaciones y coincidencias parciales en las búsquedas</div>
                             </div>
                         </label>
                     </div>
@@ -178,20 +184,20 @@
                         <small class="info-text">Configura los límites generales de búsqueda</small>
                     </div>
                     <div class="radio-group">
-                        <label class="radio-option">
-                            <div class="radio-content">
-                                <div class="radio-title">Límite total de resultados</div>
-                                <div class="radio-description">Define el número máximo total de resultados</div>
+                        <label class="checkbox-option">
+                            <div class="checkbox-content">
+                                <div class="checkbox-title">Límite total de resultados</div>
+                                <div class="checkbox-description">Define el número máximo total de resultados</div>
                                 <div class="input-number-container">
                                     <input type="number" name="maxTotal" min="1" max="1000" value="150">
                                     <span class="unit">resultados</span>
                                 </div>
                             </div>
                         </label>
-                        <label class="radio-option">
-                            <div class="radio-content">
-                                <div class="radio-title">Límite por palabra clave</div>
-                                <div class="radio-description">Define el número máximo de resultados por cada palabra clave</div>
+                        <label class="checkbox-option">
+                            <div class="checkbox-content">
+                                <div class="checkbox-title">Límite por palabra clave</div>
+                                <div class="checkbox-description">Define el número máximo de resultados por cada palabra clave</div>
                                 <div class="input-number-container">
                                     <input type="number" name="maxPerKeyword" min="1" max="100" value="20">
                                     <span class="unit">resultados</span>
@@ -207,11 +213,11 @@
                         <small class="info-text">Configura los diferentes métodos de búsqueda disponibles</small>
                     </div>
                     <div class="radio-group">
-                        <label class="radio-option">
+                        <label class="checkbox-option">
                             <input type="checkbox" id="exactSearch" name="exactEnabled" checked>
-                            <div class="radio-content">
-                                <div class="radio-title">Búsqueda Exacta</div>
-                                <div class="radio-description">Encuentra coincidencias exactas con el término buscado</div>
+                            <div class="checkbox-content">
+                                <div class="checkbox-title">Búsqueda Exacta</div>
+                                <div class="checkbox-description">Encuentra coincidencias exactas con el término buscado</div>
                                 <div class="slider-control">
                                     <span>Prioridad</span>
                                     <input type="range" name="exactPriority" min="0" max="100" value="75">
@@ -220,11 +226,11 @@
                             </div>
                         </label>
 
-                        <label class="radio-option">
+                        <label class="checkbox-option">
                             <input type="checkbox" id="fuzzySearch" name="fuzzyEnabled" checked>
-                            <div class="radio-content">
-                                <div class="radio-title">Búsqueda Aproximada</div>
-                                <div class="radio-description">Encuentra términos similares, tolerando errores tipográficos</div>
+                            <div class="checkbox-content">
+                                <div class="checkbox-title">Búsqueda Aproximada</div>
+                                <div class="checkbox-description">Encuentra términos similares, tolerando errores tipográficos</div>
                                 <div class="slider-control">
                                     <span>Tolerancia</span>
                                     <input type="range" name="fuzzyTolerance" min="0" max="100" value="50">
@@ -233,11 +239,11 @@
                             </div>
                         </label>
 
-                        <label class="radio-option">
+                        <label class="checkbox-option">
                             <input type="checkbox" id="smartSearch" name="smartEnabled" checked>
-                            <div class="radio-content">
-                                <div class="radio-title">Búsqueda Inteligente</div>
-                                <div class="radio-description">Búsqueda avanzada con análisis semántico</div>
+                            <div class="checkbox-content">
+                                <div class="checkbox-title">Búsqueda Inteligente</div>
+                                <div class="checkbox-description">Búsqueda avanzada con análisis semántico</div>
                                 <div class="slider-control">
                                     <span>Precisión</span>
                                     <input type="range" name="smartPrecision" min="0" max="100" value="75">
@@ -261,11 +267,11 @@
                     </div>
                     <div id="advancedOptions" style="display: none;">
                         <div class="radio-group">
-                            <label class="radio-option">
+                            <label class="checkbox-option">
                                 <input type="checkbox" id="prefixSearch" name="prefixEnabled">
-                                <div class="radio-content">
-                                    <div class="radio-title">Búsqueda por Prefijo</div>
-                                    <div class="radio-description">Encuentra términos que comienzan con el texto ingresado</div>
+                                <div class="checkbox-content">
+                                    <div class="checkbox-title">Búsqueda por Prefijo</div>
+                                    <div class="checkbox-description">Encuentra términos que comienzan con el texto ingresado</div>
                                     <div class="param-controls">
                                         <span>Longitud mínima</span>
                                         <input type="number" name="prefixMinLength" min="1" max="10" value="3">
@@ -274,11 +280,11 @@
                                 </div>
                             </label>
 
-                            <label class="radio-option">
+                            <label class="checkbox-option">
                                 <input type="checkbox" id="wildcardSearch" name="wildcardEnabled">
-                                <div class="radio-content">
-                                    <div class="radio-title">Búsqueda con Comodines</div>
-                                    <div class="radio-description">Usa caracteres comodín (* o ?) en la búsqueda</div>
+                                <div class="checkbox-content">
+                                    <div class="checkbox-title">Búsqueda con Comodines</div>
+                                    <div class="checkbox-description">Usa caracteres comodín (* o ?) en la búsqueda</div>
                                     <div class="param-controls">
                                         <span>Máximo de comodines</span>
                                         <input type="number" name="maxWildcards" min="1" max="5" value="2">
@@ -287,11 +293,11 @@
                                 </div>
                             </label>
 
-                            <label class="radio-option">
+                            <label class="checkbox-option">
                                 <input type="checkbox" id="regexSearch" name="regexEnabled">
-                                <div class="radio-content">
-                                    <div class="radio-title">Búsqueda con Expresiones Regulares</div>
-                                    <div class="radio-description">Usa expresiones regulares para búsquedas avanzadas</div>
+                                <div class="checkbox-content">
+                                    <div class="checkbox-title">Búsqueda con Expresiones Regulares</div>
+                                    <div class="checkbox-description">Usa expresiones regulares para búsquedas avanzadas</div>
                                     <div class="slider-control">
                                         <span>Complejidad</span>
                                         <input type="range" name="regexComplexity" min="0" max="100" value="50">

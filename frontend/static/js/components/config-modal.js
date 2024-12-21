@@ -1,3 +1,5 @@
+import { notifications } from '../utils/notifications.js';
+
 // Config Modal Component
 class ConfigModal {
     constructor() {
@@ -17,34 +19,23 @@ class ConfigModal {
     }
 
     init() {
-        // Verificar que storage esté disponible
         if (!window.storage) {
-            console.error('Storage no está disponible, reintentando en 100ms...');
+            console.warn('[ConfigModal] Storage no disponible, reintentando...');
             setTimeout(() => this.init(), 100);
             return;
         }
 
-        console.log('Inicializando modal con storage:', window.storage);
-        
-        // Inicializar referencias
         if (!this.initializeReferences()) {
-            console.error('No se pudieron inicializar las referencias del modal');
+            console.error('[ConfigModal] Error: No se pudieron inicializar las referencias');
             return;
         }
         
-        // Inicializar el botón de configuración
         this.initializeConfigButton();
-        
-        // Agregar event listeners
         this.initializeEventListeners();
-        
-        // Inicializar sección de Elastic
         this.initializeElasticSection();
-        
-        // Cargar configuración
         this.loadConfig();
 
-        console.log('Modal inicializado correctamente');
+        console.info('[ConfigModal] Inicializado correctamente');
     }
 
     initializeConfigButton() {
@@ -175,15 +166,8 @@ class ConfigModal {
             }
         });
 
-        this.restoreDefaultsButton?.addEventListener('click', async () => {
-            if (confirm('¿Estás seguro de que deseas restaurar todos los valores a su configuración predeterminada? Esta acción no se puede deshacer.')) {
-                try {
-                    await this.restoreDefaults();
-                    alert('Valores restaurados correctamente');
-                } catch (error) {
-                    alert('Error al restaurar los valores por defecto');
-                }
-            }
+        this.restoreDefaultsButton?.addEventListener('click', () => {
+            this.restoreDefaults();
         });
 
         // Close on outside click or escape key
@@ -341,23 +325,17 @@ class ConfigModal {
     }
 
     toggleOpenAIOptions() {
-        if (!this.openaiOptions || !this.searchModeRadios) return;
+        const openaiRadio = document.querySelector('input[name="searchMode"][value="openai"]');
+        const openaiOptions = document.getElementById('openaiOptions');
         
-        const openaiMode = Array.from(this.searchModeRadios)
-            .find(radio => radio.checked)?.value === 'openai';
-            
-        if (openaiMode) {
-            this.openaiOptions.style.display = 'block';
-            // Dar tiempo al navegador para aplicar el display: block
-            setTimeout(() => {
-                this.openaiOptions.classList.add('visible');
-            }, 10);
-        } else {
-            this.openaiOptions.classList.remove('visible');
-            // Esperar a que termine la animación antes de ocultar
-            setTimeout(() => {
-                this.openaiOptions.style.display = 'none';
-            }, 200);
+        if (openaiOptions) {
+            if (openaiRadio?.checked) {
+                openaiOptions.style.display = 'flex';
+                openaiOptions.style.opacity = '1';
+            } else {
+                openaiOptions.style.display = 'none';
+                openaiOptions.style.opacity = '0';
+            }
         }
     }
 
@@ -537,19 +515,35 @@ class ConfigModal {
                     openai: {}
                 },
                 sql: {
-                    ...config.sql,
-                    strictMode: document.querySelector('input[name="sqlMode"][value="strict"]')?.checked || false,
-                    // ... rest of sql config ...
+                    maxTotal: 150,
+                    maxPerKeyword: 100,
+                    maxKeywords: 10,
+                    strictMode: true
                 },
                 elastic: {
-                    limits: {},
+                    limits: {
+                        maxTotal: 50,
+                        maxPerKeyword: 10
+                    },
                     searchTypes: {
-                        exact: {},
-                        fuzzy: {},
-                        smart: {}
-                    }
+                        exact: {
+                            enabled: true,
+                            priority: 10
+                        },
+                        fuzzy: {
+                            enabled: true,
+                            tolerance: 2
+                        },
+                        smart: {
+                            enabled: true,
+                            precision: 7
+                        }
+                    },
+                    showAdvanced: false
                 }
             };
+
+            console.log('Configuración inicial:', config);
 
             // Guardar opciones de OpenAI
             const openaiCheckboxes = document.querySelectorAll('#openaiOptions input[type="checkbox"]');
@@ -567,13 +561,10 @@ class ConfigModal {
                     const min = parseInt(input.min);
                     const max = parseInt(input.max);
                     config.sql[input.name] = Math.min(Math.max(value, min), max);
-                } else {
-                    config.sql[input.name] = input.value;
                 }
             });
 
             // Guardar opciones de Elastic
-            // Límites
             const elasticLimits = document.querySelectorAll('#elasticSection .input-group input');
             elasticLimits.forEach(input => {
                 if (input.type === 'number') {
@@ -585,54 +576,68 @@ class ConfigModal {
             });
 
             // Tipos de búsqueda
-            const searchTypes = ['exact', 'fuzzy', 'smart'];
-            searchTypes.forEach(type => {
+            ['exact', 'fuzzy', 'smart'].forEach(type => {
                 const enabled = document.querySelector(`#elasticSection input[name="${type}Enabled"]`);
-                config.elastic.searchTypes[type].enabled = enabled?.checked || false;
+                config.elastic.searchTypes[type] = {
+                    enabled: enabled?.checked || false
+                };
 
                 if (type === 'exact') {
                     const priority = document.querySelector('#elasticSection input[name="exactPriority"]');
                     if (priority) {
-                        const value = parseInt(priority.value);
-                        config.elastic.searchTypes.exact.priority = Math.min(Math.max(value, 1), 100);
+                        config.elastic.searchTypes.exact.priority = Math.min(Math.max(parseInt(priority.value), 1), 100);
                     }
                 } else if (type === 'fuzzy') {
                     const tolerance = document.querySelector('#elasticSection input[name="fuzzyTolerance"]');
                     if (tolerance) {
-                        const value = parseInt(tolerance.value);
-                        config.elastic.searchTypes.fuzzy.tolerance = Math.min(Math.max(value, 1), 100);
+                        config.elastic.searchTypes.fuzzy.tolerance = Math.min(Math.max(parseInt(tolerance.value), 1), 10);
                     }
                 } else if (type === 'smart') {
                     const precision = document.querySelector('#elasticSection input[name="smartPrecision"]');
                     if (precision) {
-                        const value = parseInt(precision.value);
-                        config.elastic.searchTypes.smart.precision = Math.min(Math.max(value, 1), 100);
+                        config.elastic.searchTypes.smart.precision = Math.min(Math.max(parseInt(precision.value), 1), 10);
                     }
                 }
             });
 
-            // Validar configuración
-            if (!this.validateConfig(config)) {
-                throw new Error('Configuración inválida');
-            }
+            console.log('Configuración antes de guardar:', JSON.stringify(config, null, 2));
+
+            // Crear backup antes de guardar
+            await window.storage.createBackup();
 
             // Guardar configuración
             await window.storage.setConfig(config);
 
-            // Notificar cambios
+            // Guardar API Keys de forma segura
+            const apiKeys = {};
+            const keyInputs = document.querySelectorAll('.api-key-group input[type="password"]');
+            keyInputs.forEach(input => {
+                const provider = input.name.replace('Key', '');
+                if (input.value) {
+                    apiKeys[provider] = input.value;
+                }
+            });
+            await window.storage.setApiKeys(apiKeys);
+
+            // Obtener cambios y notificar
+            const changes = await this.getConfigChanges(config);
             window.dispatchEvent(new CustomEvent('configUpdated', { 
                 detail: { 
                     config,
-                    changes: this.getConfigChanges(config)
+                    changes
                 } 
             }));
 
-            // Cerrar modal
+            // Cerrar el modal
             this.hide();
 
+            // Mostrar notificación de éxito
+            notifications.success('Configuración guardada correctamente', 2000);
+
         } catch (error) {
-            console.error('Error guardando la configuración:', error);
-            alert('Error al guardar la configuración');
+            console.error('Error detallado al guardar la configuración:', error);
+            console.log('Estado actual de la configuración:', config);
+            notifications.error('Error al guardar la configuración. Por favor, verifica los valores ingresados.');
         }
     }
 
@@ -704,7 +709,7 @@ class ConfigModal {
         }
     }
 
-    getConfigChanges(newConfig) {
+    async getConfigChanges(newConfig) {
         const changes = {
             search: {},
             sql: {},
@@ -715,7 +720,7 @@ class ConfigModal {
         };
 
         try {
-            const oldConfig = window.storage.getConfig();
+            const oldConfig = await window.storage.getConfig();
             if (!oldConfig) return changes;
 
             // Comparar modo de búsqueda
@@ -760,36 +765,36 @@ class ConfigModal {
             // Comparar tipos de búsqueda de Elastic
             Object.entries(newConfig.elastic.searchTypes).forEach(([type, options]) => {
                 const oldOptions = oldConfig.elastic.searchTypes[type];
-                const changes = {};
+                const typeChanges = {};
 
                 if (oldOptions.enabled !== options.enabled) {
-                    changes.enabled = {
+                    typeChanges.enabled = {
                         old: oldOptions.enabled,
                         new: options.enabled
                     };
                 }
 
                 if (type === 'exact' && oldOptions.priority !== options.priority) {
-                    changes.priority = {
+                    typeChanges.priority = {
                         old: oldOptions.priority,
                         new: options.priority
                     };
                 }
                 if (type === 'fuzzy' && oldOptions.tolerance !== options.tolerance) {
-                    changes.tolerance = {
+                    typeChanges.tolerance = {
                         old: oldOptions.tolerance,
                         new: options.tolerance
                     };
                 }
                 if (type === 'smart' && oldOptions.precision !== options.precision) {
-                    changes.precision = {
+                    typeChanges.precision = {
                         old: oldOptions.precision,
                         new: options.precision
                     };
                 }
 
-                if (Object.keys(changes).length > 0) {
-                    changes.elastic.searchTypes[type] = changes;
+                if (Object.keys(typeChanges).length > 0) {
+                    changes.elastic.searchTypes[type] = typeChanges;
                 }
             });
 
@@ -802,8 +807,18 @@ class ConfigModal {
 
     async deleteOntology() {
         try {
-            await window.storage.deleteOntology();
-            alert('Ontología eliminada correctamente');
+            if (confirm('¿Estás seguro de que deseas eliminar todos los datos de ontología? Esta acción no se puede deshacer.')) {
+                // Aquí deberíamos llamar al endpoint correspondiente
+                const response = await fetch('/api/ontology', {
+                    method: 'DELETE'
+                });
+
+                if (response.ok) {
+                    alert('Ontología eliminada correctamente');
+                } else {
+                    throw new Error('Error al eliminar la ontología');
+                }
+            }
         } catch (error) {
             console.error('Error eliminando la ontología:', error);
             alert('Error al eliminar la ontología');
@@ -812,12 +827,29 @@ class ConfigModal {
 
     async restoreDefaults() {
         try {
-            await window.storage.restoreDefaults();
-            await this.loadConfig();
-            alert('Valores restaurados correctamente');
+            if (!confirm('¿Estás seguro de que deseas restaurar todos los valores a su configuración predeterminada? Esta acción no se puede deshacer.')) {
+                return;
+            }
+
+            console.info('[ConfigModal] Iniciando restauración de valores por defecto');
+            
+            // Intentar resetear la configuración
+            const success = await window.storage.resetConfig();
+            
+            if (success) {
+                console.info('[ConfigModal] Configuración reseteada correctamente');
+                
+                // Recargar la configuración en el modal
+                await this.loadConfig();
+                
+                // Notificar al usuario
+                notifications.success('Configuración restaurada correctamente');
+            } else {
+                throw new Error('No se pudo resetear la configuración');
+            }
         } catch (error) {
-            console.error('Error restaurando valores por defecto:', error);
-            alert('Error al restaurar los valores por defecto');
+            console.error('[ConfigModal] Error al restaurar:', error);
+            notifications.error('Error al restaurar los valores por defecto: ' + error.message);
         }
     }
 
@@ -886,119 +918,176 @@ class ConfigModal {
             });
 
             const data = await response.json();
-            return {
-                success: response.ok,
-                message: data.message
-            };
+            if (!response.ok) {
+                console.warn(`[ConfigModal] Error en prueba de API key ${provider}:`, data.message);
+            }
+            return { success: response.ok, message: data.message };
         } catch (error) {
-            console.error(`Error probando API key de ${provider}:`, error);
-            return {
-                success: false,
-                message: 'Error de conexión'
-            };
+            console.error(`[ConfigModal] Error de conexión al probar API key ${provider}:`, error);
+            return { success: false, message: 'Error de conexión' };
         }
     }
 
     initializeElasticSection() {
-        // Sliders para límites
-        const maxTotalSlider = document.getElementById('maxTotalResults');
-        const maxKeywordSlider = document.getElementById('maxPerKeyword');
-        
-        // Controles de tipos de búsqueda
-        const exactEnabled = document.getElementById('exactEnabled');
-        const exactPriority = document.getElementById('exactPriority');
-        const fuzzyEnabled = document.getElementById('fuzzyEnabled');
-        const fuzzyTolerance = document.getElementById('fuzzyTolerance');
-        const smartEnabled = document.getElementById('smartEnabled');
-        const smartPrecision = document.getElementById('smartPrecision');
-
-        if (!maxTotalSlider || !maxKeywordSlider || !exactEnabled || !exactPriority || 
-            !fuzzyEnabled || !fuzzyTolerance || !smartEnabled || !smartPrecision) {
-            console.error('No se pudieron encontrar todos los elementos de Elastic');
-            return;
-        }
-
-        // Función para actualizar el valor mostrado
-        const updateSliderValue = (slider, valueContainer) => {
-            valueContainer.textContent = slider.value;
+        // Esperar a que los elementos estén disponibles
+        const waitForElements = (selectors) => {
+            return new Promise((resolve) => {
+                const check = () => {
+                    const elements = selectors.map(selector => document.querySelector(selector));
+                    if (elements.every(el => el)) {
+                        resolve(elements);
+                    } else {
+                        setTimeout(check, 100);
+                    }
+                };
+                check();
+            });
         };
 
-        // Inicializar valores desde la configuración
-        const loadElasticConfig = () => {
-            const config = window.storage.getConfig();
-            if (!config?.elastic) return;
+        const requiredSelectors = [
+            '#maxTotalResults',
+            '#maxPerKeyword',
+            '#exactEnabled',
+            '#exactPriority',
+            '#fuzzyEnabled',
+            '#fuzzyTolerance',
+            '#smartEnabled',
+            '#smartPrecision'
+        ];
 
-            // Límites
-            maxTotalSlider.value = config.elastic.limits?.maxTotal || 50;
-            maxKeywordSlider.value = config.elastic.limits?.maxPerKeyword || 10;
-            updateSliderValue(maxTotalSlider, maxTotalSlider.nextElementSibling.querySelector('.value-container'));
-            updateSliderValue(maxKeywordSlider, maxKeywordSlider.nextElementSibling.querySelector('.value-container'));
+        // Inicializar cuando los elementos estén disponibles
+        waitForElements(requiredSelectors).then(([
+            maxTotalSlider,
+            maxKeywordSlider,
+            exactEnabled,
+            exactPriority,
+            fuzzyEnabled,
+            fuzzyTolerance,
+            smartEnabled,
+            smartPrecision
+        ]) => {
+            // Función para actualizar el valor mostrado
+            const updateSliderValue = (slider, valueContainer) => {
+                if (valueContainer) {
+                    valueContainer.textContent = slider.value;
+                }
+            };
 
-            // Tipos de búsqueda
-            if (config.elastic.searchTypes) {
-                // Búsqueda exacta
-                exactEnabled.checked = config.elastic.searchTypes.exact?.enabled ?? true;
-                exactPriority.value = config.elastic.searchTypes.exact?.priority || 10;
-                updateSliderValue(exactPriority, exactPriority.nextElementSibling.querySelector('.value-container'));
+            // Inicializar valores desde la configuración
+            const loadElasticConfig = () => {
+                const config = window.storage.getConfig();
+                if (!config?.elastic) return;
 
-                // Búsqueda difusa
-                fuzzyEnabled.checked = config.elastic.searchTypes.fuzzy?.enabled ?? true;
-                fuzzyTolerance.value = config.elastic.searchTypes.fuzzy?.tolerance || 2;
-                updateSliderValue(fuzzyTolerance, fuzzyTolerance.nextElementSibling.querySelector('.value-container'));
+                // Límites
+                if (maxTotalSlider && config.elastic.limits?.maxTotal) {
+                    maxTotalSlider.value = config.elastic.limits.maxTotal;
+                    updateSliderValue(maxTotalSlider, maxTotalSlider.nextElementSibling?.querySelector('.value-container'));
+                }
+                
+                if (maxKeywordSlider && config.elastic.limits?.maxPerKeyword) {
+                    maxKeywordSlider.value = config.elastic.limits.maxPerKeyword;
+                    updateSliderValue(maxKeywordSlider, maxKeywordSlider.nextElementSibling?.querySelector('.value-container'));
+                }
 
-                // Búsqueda inteligente
-                smartEnabled.checked = config.elastic.searchTypes.smart?.enabled ?? true;
-                smartPrecision.value = config.elastic.searchTypes.smart?.precision || 7;
-                updateSliderValue(smartPrecision, smartPrecision.nextElementSibling.querySelector('.value-container'));
-            }
-        };
+                // Tipos de búsqueda
+                if (config.elastic.searchTypes) {
+                    // Búsqueda exacta
+                    if (exactEnabled && exactPriority) {
+                        exactEnabled.checked = config.elastic.searchTypes.exact?.enabled ?? true;
+                        exactPriority.value = config.elastic.searchTypes.exact?.priority || 10;
+                        updateSliderValue(exactPriority, exactPriority.nextElementSibling?.querySelector('.value-container'));
+                    }
 
-        // Guardar configuración cuando cambie
-        const saveElasticConfig = () => {
-            const config = window.storage.getConfig() || {};
-            config.elastic = {
-                limits: {
-                    maxTotal: parseInt(maxTotalSlider.value),
-                    maxPerKeyword: parseInt(maxKeywordSlider.value)
-                },
-                searchTypes: {
-                    exact: {
-                        enabled: exactEnabled.checked,
-                        priority: parseInt(exactPriority.value)
-                    },
-                    fuzzy: {
-                        enabled: fuzzyEnabled.checked,
-                        tolerance: parseInt(fuzzyTolerance.value)
-                    },
-                    smart: {
-                        enabled: smartEnabled.checked,
-                        precision: parseInt(smartPrecision.value)
+                    // Búsqueda difusa
+                    if (fuzzyEnabled && fuzzyTolerance) {
+                        fuzzyEnabled.checked = config.elastic.searchTypes.fuzzy?.enabled ?? true;
+                        fuzzyTolerance.value = config.elastic.searchTypes.fuzzy?.tolerance || 2;
+                        updateSliderValue(fuzzyTolerance, fuzzyTolerance.nextElementSibling?.querySelector('.value-container'));
+                    }
+
+                    // Búsqueda inteligente
+                    if (smartEnabled && smartPrecision) {
+                        smartEnabled.checked = config.elastic.searchTypes.smart?.enabled ?? true;
+                        smartPrecision.value = config.elastic.searchTypes.smart?.precision || 7;
+                        updateSliderValue(smartPrecision, smartPrecision.nextElementSibling?.querySelector('.value-container'));
                     }
                 }
             };
-            window.storage.saveConfig(config);
-        };
 
-        // Event listeners para sliders
-        const sliders = [maxTotalSlider, maxKeywordSlider, exactPriority, fuzzyTolerance, smartPrecision];
-        sliders.forEach(slider => {
-            slider.addEventListener('input', (e) => {
-                const valueContainer = e.target.nextElementSibling.querySelector('.value-container');
-                if (valueContainer) {
-                    updateSliderValue(e.target, valueContainer);
-                    saveElasticConfig();
+            // Guardar configuración cuando cambie
+            const saveElasticConfig = () => {
+                const config = window.storage.getConfig() || {};
+                config.elastic = {
+                    limits: {
+                        maxTotal: parseInt(maxTotalSlider.value),
+                        maxPerKeyword: parseInt(maxKeywordSlider.value)
+                    },
+                    searchTypes: {
+                        exact: {
+                            enabled: exactEnabled.checked,
+                            priority: parseInt(exactPriority.value)
+                        },
+                        fuzzy: {
+                            enabled: fuzzyEnabled.checked,
+                            tolerance: parseInt(fuzzyTolerance.value)
+                        },
+                        smart: {
+                            enabled: smartEnabled.checked,
+                            precision: parseInt(smartPrecision.value)
+                        }
+                    },
+                    showAdvanced: document.getElementById('showAdvanced')?.checked || false
+                };
+                window.storage.setConfig(config);
+            };
+
+            // Event listeners para sliders
+            const sliders = [maxTotalSlider, maxKeywordSlider, exactPriority, fuzzyTolerance, smartPrecision];
+            sliders.forEach(slider => {
+                if (slider) {
+                    slider.addEventListener('input', (e) => {
+                        const valueContainer = e.target.nextElementSibling?.querySelector('.value-container');
+                        if (valueContainer) {
+                            updateSliderValue(e.target, valueContainer);
+                            saveElasticConfig();
+                        }
+                    });
                 }
             });
+
+            // Event listeners para checkboxes
+            const checkboxes = [exactEnabled, fuzzyEnabled, smartEnabled];
+            checkboxes.forEach(checkbox => {
+                if (checkbox) {
+                    checkbox.addEventListener('change', saveElasticConfig);
+                }
+            });
+
+            // Cargar configuración inicial
+            loadElasticConfig();
+        }).catch(error => {
+            console.error('[ConfigModal] Error en sección Elastic:', error);
+        });
+    }
+
+    // Agregar botón de restaurar backup
+    initializeBackupControls() {
+        const backupBtn = document.createElement('button');
+        backupBtn.textContent = 'Restaurar última configuración';
+        backupBtn.classList.add('backup-btn');
+        backupBtn.addEventListener('click', async () => {
+            if (await window.storage.restoreFromBackup()) {
+                await this.loadConfig();
+                notifications.success('Configuración restaurada correctamente');
+            } else {
+                notifications.warning('No hay backup disponible');
+            }
         });
 
-        // Event listeners para checkboxes
-        const checkboxes = [exactEnabled, fuzzyEnabled, smartEnabled];
-        checkboxes.forEach(checkbox => {
-            checkbox.addEventListener('change', saveElasticConfig);
-        });
-
-        // Cargar configuración inicial
-        loadElasticConfig();
+        const controlsSection = document.querySelector('.modal-controls');
+        if (controlsSection) {
+            controlsSection.insertBefore(backupBtn, controlsSection.firstChild);
+        }
     }
 }
 
