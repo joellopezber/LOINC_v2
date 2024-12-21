@@ -171,6 +171,7 @@ export class ConfigModal {
                 } else {
                     openaiOptions.style.display = 'none';
                 }
+                this.markAsChanged();
             });
         });
 
@@ -178,7 +179,7 @@ export class ConfigModal {
         const openaiCheckboxes = document.querySelectorAll('#openaiOptions input[type="checkbox"]');
         openaiCheckboxes.forEach(checkbox => {
             checkbox.addEventListener('change', () => {
-                this.updateConfig();
+                this.markAsChanged();
             });
         });
     }
@@ -190,7 +191,7 @@ export class ConfigModal {
             const valueContainer = slider.nextElementSibling.querySelector('.value-container');
             slider.addEventListener('input', () => {
                 valueContainer.textContent = `${slider.value}%`;
-                this.updateConfig();
+                this.markAsChanged();
             });
         });
 
@@ -200,7 +201,7 @@ export class ConfigModal {
         if (showAdvancedToggle && advancedOptions) {
             showAdvancedToggle.addEventListener('change', () => {
                 advancedOptions.style.display = showAdvancedToggle.checked ? 'block' : 'none';
-                this.updateConfig();
+                this.markAsChanged();
             });
         }
 
@@ -211,7 +212,7 @@ export class ConfigModal {
             if (toggle && options) {
                 toggle.addEventListener('change', () => {
                     options.style.display = toggle.checked ? 'flex' : 'none';
-                    this.updateConfig();
+                    this.markAsChanged();
                 });
             }
         });
@@ -223,7 +224,7 @@ export class ConfigModal {
             if (toggle && options) {
                 toggle.addEventListener('change', () => {
                     options.style.display = toggle.checked ? 'flex' : 'none';
-                    this.updateConfig();
+                    this.markAsChanged();
                 });
             }
         });
@@ -234,7 +235,7 @@ export class ConfigModal {
         const sqlInputs = document.querySelectorAll('#sqlSection input[type="number"]');
         sqlInputs.forEach(input => {
             input.addEventListener('change', () => {
-                this.updateConfig();
+                this.markAsChanged();
             });
         });
     }
@@ -593,11 +594,17 @@ export class ConfigModal {
             const input = document.querySelector(`input[name="${provider}ApiKey"]`);
             const button = document.querySelector(`button[data-provider="${provider}"].api-key-test`);
             if (input && button) {
+                // Limpiar el valor del input
+                input.value = '';
+                // Resetear el estado del botón
                 button.innerHTML = 'Probar';
                 button.classList.remove('save-mode');
                 button.disabled = false;
+                // Resetear el estado visual
+                this.updateApiKeyStatus(provider, false);
             }
         });
-        this.loadSavedApiKeys(); // Recargar las API keys guardadas
+        // Recargar las API keys guardadas después de limpiar
+        this.loadSavedApiKeys();
     }
 } 
