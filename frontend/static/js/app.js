@@ -1,6 +1,6 @@
 import SearchComponent from './components/search.js';
 import { apiClient } from './api/client.js';
-import configModal from './components/config-modal.js';
+import { ConfigModal } from './components/config-modal.js';
 import { storage } from './utils/storage.js';
 
 // Inicializar storage primero
@@ -16,7 +16,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Inicializar componentes
     window.searchComponent = new SearchComponent();
     window.apiClient = apiClient;
-    window.configModal = configModal;
+    window.configModal = new ConfigModal();
 
     // Manejar el submit del formulario de búsqueda
     const searchForm = document.querySelector('.search-box');

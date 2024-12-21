@@ -238,22 +238,34 @@ class StorageService {
 
     async getApiKeys() {
         try {
+            console.log('[Storage] Obteniendo API keys...');
             const encryptedKeys = localStorage.getItem('apiKeys');
-            if (!encryptedKeys) return {};
             
+            if (!encryptedKeys) {
+                console.log('[Storage] No hay API keys almacenadas');
+                return {};
+            }
+            
+            console.log('[Storage] Desencriptando API keys...');
             const decryptedKeys = await encryption.decrypt(encryptedKeys);
+            console.log('[Storage] Keys desencriptadas correctamente');
+            
             return decryptedKeys ? JSON.parse(decryptedKeys) : {};
         } catch (error) {
-            console.error('Error al obtener API keys:', error);
+            console.error('[Storage] Error al obtener API keys:', error);
             return {};
         }
     }
 
     async setApiKeys(keys) {
         try {
+            console.log('[Storage] Guardando API keys...', Object.keys(keys));
             const encryptedKeys = await encryption.encrypt(JSON.stringify(keys));
+            
             if (encryptedKeys) {
+                console.log('[Storage] Keys encriptadas correctamente');
                 localStorage.setItem('apiKeys', encryptedKeys);
+                console.log('[Storage] Keys guardadas en localStorage');
             }
         } catch (error) {
             console.error('[Storage] Error al guardar API keys:', error);

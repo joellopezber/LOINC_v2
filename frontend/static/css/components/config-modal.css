@@ -883,37 +883,6 @@
     transform: translateX(20px);
 }
 
-/* Estilos para la sección de IA */
-.api-key-input {
-    margin-top: 10px;
-    width: 100%;
-}
-
-.api-input {
-    width: 100%;
-    padding: 8px 12px;
-    border: 1px solid #dadce0;
-    border-radius: 4px;
-    font-size: 14px;
-    color: #3c4043;
-    background-color: #fff;
-    transition: border-color 0.2s ease;
-}
-
-.api-input:focus {
-    outline: none;
-    border-color: #1a73e8;
-}
-
-.api-input::placeholder {
-    color: #80868b;
-}
-
-/* Ajustes para el icono de IA */
-.nav-item[data-section="ai"] .material-icons {
-    font-size: 24px;
-}
-
 /* Estilos para la sección de API Keys */
 .api-keys-container {
     display: flex;
@@ -961,28 +930,36 @@
     display: flex;
     align-items: center;
     gap: 8px;
-    padding: 4px 12px;
-    border-radius: 16px;
-    background: #f1f3f4;
+    margin-top: 4px;
 }
 
 .status-dot {
     width: 8px;
     height: 8px;
     border-radius: 50%;
+    background-color: #ccc;
+    transition: background-color 0.3s ease;
 }
 
 .status-dot.configured {
-    background-color: #34a853;
+    background-color: #4CAF50;
 }
 
 .status-dot.not-configured {
-    background-color: #ea4335;
+    background-color: #9E9E9E;
+}
+
+.status-dot.error {
+    background-color: #F44336;
 }
 
 .status-text {
-    font-size: 0.85rem;
-    color: #5f6368;
+    font-size: 12px;
+    color: #666;
+}
+
+.status-text.error-text {
+    color: #F44336;
 }
 
 .api-key-input-group {
@@ -1045,19 +1022,30 @@
     font-size: 18px;
 }
 
+.api-key-test .material-icons.rotating {
+    animation: rotate 1s linear infinite;
+}
+
+@keyframes rotate {
+    from {
+        transform: rotate(0deg);
+    }
+    to {
+        transform: rotate(360deg);
+    }
+}
+
 /* Ajustes para el icono de API Keys */
 .nav-item[data-section="apikeys"] .material-icons {
     font-size: 20px;
 }
 
 /* Ajustes específicos para las nuevas secciones */
-#apikeysSection,
-#aiSection {
+#apikeysSection {
     opacity: 0;
     transition: opacity 0.3s ease;
 }
 
-#apikeysSection.active,
-#aiSection.active {
+#apikeysSection.active {
     opacity: 1;
 }
