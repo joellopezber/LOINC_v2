@@ -557,7 +557,7 @@ class ConfigModal {
 
     async saveAndClose() {
         try {
-            const config = {
+            const config = await window.storage.getConfig() || {
                 search: {
                     ontologyMode: Array.from(this.searchModeRadios)
                         .find(r => r.checked)?.value || 'multi_match',
@@ -616,40 +616,32 @@ class ConfigModal {
             });
 
             // Guardar opciones de Elastic
-            const elasticLimits = document.querySelectorAll('#elasticSection .input-group input');
-            elasticLimits.forEach(input => {
-                if (input.type === 'number') {
-                    const value = parseInt(input.value);
-                    const min = parseInt(input.min);
-                    const max = parseInt(input.max);
-                    config.elastic.limits[input.name] = Math.min(Math.max(value, min), max);
-                }
-            });
+            config.elastic = {
+                limits: {
+                    maxTotal: parseInt(document.querySelector('#elasticSection input[name="maxTotal"]').value),
+                    maxPerKeyword: parseInt(document.querySelector('#elasticSection input[name="maxPerKeyword"]').value)
+                },
+                searchTypes: {
+                    exact: {
+                        enabled: document.querySelector('#elasticSection input[name="exactEnabled"]').checked,
+                        priority: parseInt(document.querySelector('#elasticSection input[name="exactPriority"]').value)
+                    },
+                    fuzzy: {
+                        enabled: document.querySelector('#elasticSection input[name="fuzzyEnabled"]').checked,
+                        tolerance: parseInt(document.querySelector('#elasticSection input[name="fuzzyTolerance"]').value)
+                    },
+                    smart: {
+                        enabled: document.querySelector('#elasticSection input[name="smartEnabled"]').checked,
+                        precision: parseInt(document.querySelector('#elasticSection input[name="smartPrecision"]').value)
+                    }
+                },
+                showAdvanced: document.getElementById('showAdvanced')?.checked || false
+            };
 
-            // Tipos de búsqueda
-            ['exact', 'fuzzy', 'smart'].forEach(type => {
-                const enabled = document.querySelector(`#elasticSection input[name="${type}Enabled"]`);
-                config.elastic.searchTypes[type] = {
-                    enabled: enabled?.checked || false
-                };
-
-                if (type === 'exact') {
-                    const priority = document.querySelector('#elasticSection input[name="exactPriority"]');
-                    if (priority) {
-                        config.elastic.searchTypes.exact.priority = Math.min(Math.max(parseInt(priority.value), 1), 100);
-                    }
-                } else if (type === 'fuzzy') {
-                    const tolerance = document.querySelector('#elasticSection input[name="fuzzyTolerance"]');
-                    if (tolerance) {
-                        config.elastic.searchTypes.fuzzy.tolerance = Math.min(Math.max(parseInt(tolerance.value), 1), 10);
-                    }
-                } else if (type === 'smart') {
-                    const precision = document.querySelector('#elasticSection input[name="smartPrecision"]');
-                    if (precision) {
-                        config.elastic.searchTypes.smart.precision = Math.min(Math.max(parseInt(precision.value), 1), 10);
-                    }
-                }
-            });
+            // Validar la configuración antes de guardar
+            if (!this.validateConfig(config)) {
+                throw new Error('La configuración no es válida');
+            }
 
             console.log('Configuración antes de guardar:', JSON.stringify(config, null, 2));
 
@@ -901,54 +893,6 @@ class ConfigModal {
         } catch (error) {
             console.error('[ConfigModal] Error al restaurar:', error);
             notifications.error('Error al restaurar los valores por defecto: ' + error.message);
-        }
-    }
-
-    async saveConfig() {
-        try {
-            const config = await window.storage.getConfig() || {};
-
-            // ... existing code ...
-
-            // Elastic Search
-            config.elastic = {
-                limits: {
-                    maxTotal: parseInt(document.querySelector('#elasticSection input[name="maxTotal"]').value),
-                    maxPerKeyword: parseInt(document.querySelector('#elasticSection input[name="maxPerKeyword"]').value)
-                },
-                searchTypes: {
-                    exact: {
-                        enabled: document.querySelector('#elasticSection input[name="exactEnabled"]').checked,
-                        priority: parseInt(document.querySelector('#elasticSection input[name="exactPriority"]').value)
-                    },
-                    fuzzy: {
-                        enabled: document.querySelector('#elasticSection input[name="fuzzyEnabled"]').checked,
-                        tolerance: parseInt(document.querySelector('#elasticSection input[name="fuzzyTolerance"]').value)
-                    },
-                    smart: {
-                        enabled: document.querySelector('#elasticSection input[name="smartEnabled"]').checked,
-                        precision: parseInt(document.querySelector('#elasticSection input[name="smartPrecision"]').value)
-                    }
-                },
-                showAdvanced: document.getElementById('showAdvanced').checked
-            };
-
-            // ... rest of existing code ...
-
-            // Guardar API Keys
-            const apiKeys = {};
-            document.querySelectorAll('.api-key-group input[type="password"]').forEach(input => {
-                const provider = input.name.replace('Key', '');
-                if (input.value) {
-                    apiKeys[provider] = input.value;
-                }
-            });
-            await window.storage.setApiKeys(apiKeys);
-
-            // ... rest of existing code ...
-        } catch (error) {
-            console.error('Error guardando la configuración:', error);
-            alert('Error al guardar la configuración');
         }
     }
 

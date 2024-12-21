@@ -50,12 +50,9 @@ class EncryptionService {
     async decrypt(encryptedData) {
         try {
             const [encryptedText, iv] = encryptedData.split('|');
-            const encryptedArray = new Uint8Array(
-                atob(encryptedText).split('').map(c => c.charCodeAt(0))
-            );
-            const ivArray = new Uint8Array(
-                atob(iv).split('').map(c => c.charCodeAt(0))
-            );
+            // Conversión más segura de base64 a Uint8Array
+            const encryptedArray = Uint8Array.from(atob(encryptedText), c => c.charCodeAt(0));
+            const ivArray = Uint8Array.from(atob(iv), c => c.charCodeAt(0));
 
             const key = await crypto.subtle.importKey(
                 'raw',
