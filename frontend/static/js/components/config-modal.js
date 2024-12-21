@@ -1,257 +1,150 @@
+import { apiKeyService } from '../services/api-key.service.js';
+import { storage } from '../utils/storage.js';
 import { notifications } from '../utils/notifications.js';
 
-// Config Modal Component
-class ConfigModal {
+export class ConfigModal {
     constructor() {
-        // Esperar a que el DOM esté listo
-        if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', () => this.init());
-        } else {
-            // Esperar un momento para asegurar que storage esté disponible
-            setTimeout(() => this.init(), 0);
-        }
-
-        // Agregar listener para abrir el modal
-        document.addEventListener('modal:open', () => {
-            console.log('Evento modal:open recibido');
-            this.show();
-        });
-    }
-
-    init() {
-        if (!window.storage) {
-            console.warn('[ConfigModal] Storage no disponible, reintentando...');
-            setTimeout(() => this.init(), 100);
-            return;
-        }
-
-        if (!this.initializeReferences()) {
-            console.error('[ConfigModal] Error: No se pudieron inicializar las referencias');
-            return;
-        }
-        
-        this.initializeConfigButton();
-        this.initializeEventListeners();
-        this.initializeElasticSection();
-        this.loadConfig();
-
-        console.info('[ConfigModal] Inicializado correctamente');
-    }
-
-    initializeConfigButton() {
-        const configButton = document.querySelector('.config-button');
-        if (configButton) {
-            configButton.addEventListener('click', () => {
-                this.show();
-            });
-        } else {
-            console.error('No se encontró el botón de configuración');
-        }
-    }
-
-    initializeReferences() {
-        // Modal elements
         this.modal = document.getElementById('configModal');
-        this.closeButton = document.getElementById('closeConfigModal');
-        this.cancelButton = document.getElementById('cancelConfig');
-        this.saveButton = document.getElementById('saveConfig');
-        this.deleteOntologyButton = document.getElementById('deleteOntology');
-        this.restoreDefaultsButton = document.getElementById('restoreDefaults');
-        
-        // Navigation
-        this.navItems = document.querySelectorAll('.nav-item');
-        
-        // Sections
         this.sections = {
             search: document.getElementById('searchSection'),
             elastic: document.getElementById('elasticSection'),
             sql: document.getElementById('sqlSection'),
             config: document.getElementById('configSection'),
-            apikeys: document.getElementById('apikeysSection'),
-            ai: document.getElementById('aiSection')
+            apikeys: document.getElementById('apikeysSection')
         };
         
-        // Search options
-        this.searchModeRadios = document.querySelectorAll('input[name="searchMode"]');
-        this.dbModeRadios = document.querySelectorAll('input[name="dbMode"]');
-        this.openaiOptions = document.getElementById('openaiOptions');
-
-        // Verificar elementos críticos
-        if (!this.modal || !this.sections.search) {
-            console.error('Elementos críticos del modal no encontrados');
-            return false;
-        }
-
-        return true;
+        // Tracking de cambios
+        this.hasUnsavedChanges = false;
+        this.hasUnsavedApiKeys = false;
+        
+        this.initializeEventListeners();
+        this.loadSavedConfig();
+        this.loadSavedApiKeys();
+        
+        // Escuchar eventos globales de apertura/cierre
+        document.addEventListener('modal:open', () => this.open());
+        document.addEventListener('modal:close', () => this.close());
     }
 
-    initializeEventListeners() {
-        // Modal controls
-        this.closeButton?.addEventListener('click', () => this.hide());
-        this.cancelButton?.addEventListener('click', () => this.hide());
-        this.saveButton?.addEventListener('click', () => this.saveAndClose());
+    open() {
+        console.log('[ConfigModal] Abriendo modal...');
+        if (this.modal) {
+            this.modal.classList.add('visible');
+            // Activar la primera sección por defecto
+            this.activateSection('search');
+        }
+    }
 
-        // Navigation
-        document.querySelector('.modal-nav')?.addEventListener('click', (e) => {
-            const navItem = e.target.closest('.nav-item');
-            if (navItem) {
-                const section = navItem.dataset.section;
-                if (section) {
-                    this.switchSection(section);
+    close() {
+        console.log('[ConfigModal] Cerrando modal...');
+        if (this.modal) {
+            if (this.hasUnsavedChanges || this.hasUnsavedApiKeys) {
+                const shouldClose = confirm('Hay cambios sin guardar. ¿Deseas cerrar sin guardar?');
+                if (!shouldClose) {
+                    return;
                 }
+            }
+            this.modal.classList.remove('visible');
+            this.resetChangeTracking();
+            this.resetApiKeyInputs();
+        }
+    }
+
+    activateSection(sectionId) {
+        console.log(`[ConfigModal] Activando sección: ${sectionId}`);
+        // Desactivar todas las secciones
+        Object.values(this.sections).forEach(section => {
+            if (section) {
+                section.classList.remove('active');
             }
         });
 
-        // Header controls
-        document.querySelectorAll('.header-controls input[type="number"]').forEach(input => {
-            input.addEventListener('change', (e) => {
-                const slider = e.target.closest('.option-group').querySelector('input[type="range"]');
-                if (slider) {
-                    slider.value = e.target.value;
-                    this.updateSliderValue(slider);
+        // Activar la sección seleccionada
+        const targetSection = this.sections[sectionId];
+        if (targetSection) {
+            targetSection.classList.add('active');
+        }
+
+        // Actualizar botones de navegación
+        const navButtons = document.querySelectorAll('.nav-item');
+        navButtons.forEach(button => {
+            button.classList.toggle('active', button.dataset.section === sectionId);
+        });
+    }
+
+    async initializeEventListeners() {
+        // Botones de prueba/guardado de API keys
+        const testButtons = document.querySelectorAll('.api-key-test');
+        testButtons.forEach(button => {
+            button.addEventListener('click', async (e) => {
+                const provider = button.dataset.provider;
+                const input = document.querySelector(`input[name="${provider}ApiKey"]`);
+                
+                switch(button.dataset.mode) {
+                    case 'delete':
+                        await this.deleteApiKey(provider);
+                        break;
+                    case 'save':
+                        await this.saveApiKey(provider, input.value);
+                        break;
+                    default:
+                        await this.testApiKey(provider, input.value);
                 }
             });
         });
 
-        // Sliders
-        document.querySelectorAll('.slider-control input[type="range"]').forEach(slider => {
-            slider.addEventListener('input', (e) => this.updateSliderValue(e.target));
-        });
-
-        // Checkboxes en header
-        document.querySelectorAll('.header-controls input[type="checkbox"]').forEach(checkbox => {
-            checkbox.addEventListener('change', (e) => {
-                const controls = e.target.closest('.option-group').querySelector('.param-controls');
-                if (controls) {
-                    controls.style.display = e.target.checked ? 'block' : 'none';
-                }
-            });
-        });
-
-        // Actualizar valores de los deslizadores
-        document.querySelectorAll('.slider-control input[type="range"]').forEach(slider => {
-            const valueContainer = slider.nextElementSibling;
-            slider.addEventListener('input', () => {
-                valueContainer.textContent = `${slider.value}%`;
-            });
-        });
-
-        // Toggle configuración avanzada
-        const showAdvancedCheckbox = document.getElementById('showAdvanced');
-        const advancedOptions = document.getElementById('advancedOptions');
-        if (showAdvancedCheckbox && advancedOptions) {
-            showAdvancedCheckbox.addEventListener('change', () => {
-                advancedOptions.style.display = showAdvancedCheckbox.checked ? 'block' : 'none';
-            });
-        }
-
-        // Toggle longitud mínima
-        const prefixSearchCheckbox = document.getElementById('prefixSearch');
-        const prefixLengthOptions = document.getElementById('prefixLengthOptions');
-        if (prefixSearchCheckbox && prefixLengthOptions) {
-            prefixSearchCheckbox.addEventListener('change', () => {
-                prefixLengthOptions.style.display = prefixSearchCheckbox.checked ? 'block' : 'none';
-            });
-        }
-
-        // Toggle búsqueda con comodines
-        const wildcardSearchCheckbox = document.getElementById('wildcardSearch');
-        const wildcardOptions = document.getElementById('wildcardOptions');
-        if (wildcardSearchCheckbox && wildcardOptions) {
-            wildcardSearchCheckbox.addEventListener('change', () => {
-                wildcardOptions.style.display = wildcardSearchCheckbox.checked ? 'block' : 'none';
-            });
-        }
-
-        // Toggle búsqueda con expresiones regulares
-        const regexSearchCheckbox = document.getElementById('regexSearch');
-        const regexOptions = document.getElementById('regexOptions');
-        if (regexSearchCheckbox && regexOptions) {
-            regexSearchCheckbox.addEventListener('change', () => {
-                regexOptions.style.display = regexSearchCheckbox.checked ? 'block' : 'none';
-            });
-        }
-
-        // Toggle tipos de búsqueda
-        const searchTypes = [
-            { checkbox: 'exactSearch', options: 'exactOptions' },
-            { checkbox: 'fuzzySearch', options: 'fuzzyOptions' },
-            { checkbox: 'smartSearch', options: 'smartOptions' }
-        ];
-
-        searchTypes.forEach(type => {
-            const checkbox = document.getElementById(type.checkbox);
-            const options = document.getElementById(type.options);
-            if (checkbox && options) {
-                checkbox.addEventListener('change', () => {
-                    options.style.display = checkbox.checked ? 'block' : 'none';
-                });
-                // Inicializar estado
-                options.style.display = checkbox.checked ? 'block' : 'none';
-            }
-        });
-
-        // Search mode change
-        this.searchModeRadios?.forEach(radio => {
-            radio.addEventListener('change', () => {
-                this.toggleOpenAIOptions();
-                // Disparar evento de cambio de modo
-                window.dispatchEvent(new CustomEvent('searchModeChanged', {
-                    detail: { mode: radio.value }
-                }));
-            });
-        });
-
-        // Data management
-        this.deleteOntologyButton?.addEventListener('click', async () => {
-            if (confirm('¿Estás seguro de que deseas eliminar todos los datos de ontología? Esta acción no se puede deshacer.')) {
+        // Botón de guardar configuración
+        const saveButton = document.getElementById('saveConfig');
+        if (saveButton) {
+            saveButton.addEventListener('click', async () => {
+                const originalText = saveButton.innerHTML;
                 try {
-                    await this.deleteOntology();
-                    alert('Ontología eliminada correctamente');
-                } catch (error) {
-                    alert('Error al eliminar la ontología');
+                    saveButton.disabled = true;
+                    saveButton.innerHTML = '<span class="material-icons rotating">sync</span> Guardando...';
+                    await this.saveConfig();
+                    this.close();
+                } finally {
+                    saveButton.disabled = false;
+                    saveButton.innerHTML = originalText;
                 }
-            }
-        });
+            });
+        }
 
-        this.restoreDefaultsButton?.addEventListener('click', async () => {
-            try {
-                await this.restoreDefaults();
-            } catch (error) {
-                console.error('[ConfigModal] Error al restaurar:', error);
-                notifications.error('Error al restaurar los valores por defecto');
-            }
-        });
+        // Botón de cancelar
+        const cancelButton = document.getElementById('cancelConfig');
+        if (cancelButton) {
+            cancelButton.addEventListener('click', () => this.close());
+        }
 
-        // Close on outside click or escape key
-        this.modal?.addEventListener('click', (e) => {
+        // Botón de cierre del modal (X)
+        const closeButton = this.modal.querySelector('.close-button');
+        if (closeButton) {
+            closeButton.addEventListener('click', () => this.close());
+        }
+
+        // Click fuera del modal para cerrar
+        this.modal.addEventListener('click', (e) => {
             if (e.target === this.modal) {
-                this.hide();
+                this.close();
             }
         });
 
-        document.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape' && this.modal?.classList.contains('visible')) {
-                this.hide();
-            }
-        });
-
-        // Input validation
-        document.querySelectorAll('input[type="number"]').forEach(input => {
-            input.addEventListener('input', () => {
-                const value = parseInt(input.value);
-                const min = parseInt(input.min);
-                const max = parseInt(input.max);
-
-                if (value < min) input.value = min;
-                if (value > max) input.value = max;
+        // Navegación entre secciones
+        const navButtons = document.querySelectorAll('.nav-item');
+        navButtons.forEach(button => {
+            button.addEventListener('click', () => {
+                const sectionId = button.dataset.section;
+                if (sectionId) {
+                    this.activateSection(sectionId);
+                }
             });
         });
 
-        // API Key visibility toggles
-        document.querySelectorAll('.toggle-visibility').forEach(button => {
-            button.addEventListener('click', (e) => {
-                const input = e.target.closest('.key-input').querySelector('input');
+        // Toggle visibilidad de API keys
+        const toggleButtons = document.querySelectorAll('.api-key-toggle');
+        toggleButtons.forEach(button => {
+            button.addEventListener('click', () => {
+                const input = button.previousElementSibling;
                 const icon = button.querySelector('.material-icons');
                 if (input.type === 'password') {
                     input.type = 'text';
@@ -263,832 +156,507 @@ class ConfigModal {
             });
         });
 
-        // API Key test buttons
-        document.querySelectorAll('.test-key').forEach(button => {
-            button.addEventListener('click', async () => {
-                const provider = button.dataset.provider;
-                const input = button.closest('.api-key-group').querySelector('input');
-                const statusContainer = button.closest('.api-key-group').querySelector('.key-status');
-                const statusIndicator = statusContainer.querySelector('.status-indicator');
-                const statusText = statusContainer.querySelector('.status-text');
+        // Eventos de configuración
+        this.initializeSearchEvents();
+        this.initializeElasticEvents();
+        this.initializeSqlEvents();
+        this.initializeConfigEvents();
+    }
 
-                if (!input.value) {
-                    this.updateKeyStatus(statusIndicator, statusText, 'error', 'API Key no configurada');
-                    return;
+    initializeSearchEvents() {
+        // Modo de búsqueda
+        const searchModeInputs = document.querySelectorAll('input[name="searchMode"]');
+        searchModeInputs.forEach(input => {
+            input.addEventListener('change', () => {
+                const openaiOptions = document.getElementById('openaiOptions');
+                if (input.value === 'openai') {
+                    openaiOptions.style.display = 'flex';
+                } else {
+                    openaiOptions.style.display = 'none';
                 }
-
-                try {
-                    statusIndicator.className = 'status-indicator loading';
-                    statusText.textContent = 'Probando conexión...';
-                    
-                    const result = await this.testApiKey(provider, input.value);
-                    
-                    if (result.success) {
-                        this.updateKeyStatus(statusIndicator, statusText, 'success', 'Conexión exitosa');
-                    } else {
-                        this.updateKeyStatus(statusIndicator, statusText, 'error', result.message || 'Error de conexión');
-                    }
-                } catch (error) {
-                    this.updateKeyStatus(statusIndicator, statusText, 'error', 'Error de conexión');
-                }
+                this.markAsChanged();
             });
         });
 
-        // SQL Search Limit Radio Buttons
-        const sqlSearchLimitRadios = document.querySelectorAll('input[name="sqlSearchLimit"]');
-        const sqlMaxTotalInput = document.querySelector('input[name="sqlMaxTotal"]');
-        
-        sqlSearchLimitRadios.forEach(radio => {
-            radio.addEventListener('change', (e) => {
-                if (sqlMaxTotalInput) {
-                    sqlMaxTotalInput.disabled = e.target.value === 'default';
-                }
+        // Opciones de OpenAI
+        const openaiCheckboxes = document.querySelectorAll('#openaiOptions input[type="checkbox"]');
+        openaiCheckboxes.forEach(checkbox => {
+            checkbox.addEventListener('change', () => {
+                this.markAsChanged();
+            });
+        });
+    }
+
+    initializeElasticEvents() {
+        // Sliders de Elastic
+        const sliders = document.querySelectorAll('#elasticSection input[type="range"]');
+        sliders.forEach(slider => {
+            const valueContainer = slider.nextElementSibling.querySelector('.value-container');
+            slider.addEventListener('input', () => {
+                valueContainer.textContent = `${slider.value}%`;
+                this.markAsChanged();
             });
         });
 
-        // Elastic Search Type Checkboxes
-        const elasticSearchTypes = ['exact', 'fuzzy', 'smart'];
-        elasticSearchTypes.forEach(type => {
-            const checkbox = document.querySelector(`#${type}Enabled`);
-            const controls = checkbox?.closest('.radio-option').querySelector('.param-controls');
-            
-            if (checkbox && controls) {
-                checkbox.addEventListener('change', (e) => {
-                    controls.style.display = e.target.checked ? 'block' : 'none';
+        // Toggle de opciones avanzadas
+        const showAdvancedToggle = document.getElementById('showAdvanced');
+        const advancedOptions = document.getElementById('advancedOptions');
+        if (showAdvancedToggle && advancedOptions) {
+            showAdvancedToggle.addEventListener('change', () => {
+                advancedOptions.style.display = showAdvancedToggle.checked ? 'block' : 'none';
+                this.markAsChanged();
+            });
+        }
+
+        // Switches de tipos de búsqueda
+        ['exact', 'fuzzy', 'smart'].forEach(type => {
+            const toggle = document.querySelector(`#${type}Search`);
+            const options = document.querySelector(`#${type}Options`);
+            if (toggle && options) {
+                toggle.addEventListener('change', () => {
+                    options.style.display = toggle.checked ? 'flex' : 'none';
+                    this.markAsChanged();
+                });
+            }
+        });
+
+        // Switches de opciones avanzadas
+        ['prefix', 'wildcard'].forEach(type => {
+            const toggle = document.querySelector(`#${type}Search`);
+            const options = document.querySelector(`#${type}Options`);
+            if (toggle && options) {
+                toggle.addEventListener('change', () => {
+                    options.style.display = toggle.checked ? 'flex' : 'none';
+                    this.markAsChanged();
                 });
             }
         });
     }
 
-    updateSliderValue(slider) {
-        const valueContainer = slider.closest('.slider-control').querySelector('.value-container');
-        if (valueContainer) {
-            valueContainer.textContent = `${slider.value}%`;
+    initializeSqlEvents() {
+        // Eventos para inputs numéricos de SQL
+        const sqlInputs = document.querySelectorAll('#sqlSection input[type="number"]');
+        sqlInputs.forEach(input => {
+            input.addEventListener('change', () => {
+                this.markAsChanged();
+            });
+        });
+    }
+
+    initializeConfigEvents() {
+        // Exportar configuración
+        const exportButton = document.getElementById('exportConfig');
+        if (exportButton) {
+            exportButton.addEventListener('click', () => this.exportConfig());
+        }
+
+        // Importar configuración
+        const importButton = document.getElementById('importConfig');
+        if (importButton) {
+            importButton.addEventListener('click', () => this.importConfig());
+        }
+
+        // Restaurar valores por defecto
+        const restoreButton = document.getElementById('restoreDefaults');
+        if (restoreButton) {
+            restoreButton.addEventListener('click', () => this.restoreDefaults());
         }
     }
 
-    show() {
-        if (this.modal) {
-            this.modal.classList.add('visible');
-            // Cargar configuración actual
-            this.loadConfig();
+    async loadSavedConfig() {
+        console.log('[ConfigModal] Cargando configuración guardada...');
+        const config = await storage.getConfig();
+        
+        // Modo de búsqueda
+        const searchMode = document.querySelector(`input[name="searchMode"][value="${config.search.ontologyMode}"]`);
+        if (searchMode) {
+            searchMode.checked = true;
+            const openaiOptions = document.getElementById('openaiOptions');
+            if (openaiOptions) {
+                openaiOptions.style.display = config.search.ontologyMode === 'openai' ? 'flex' : 'none';
+            }
+        }
+
+        // Opciones de OpenAI
+        Object.entries(config.search.openai).forEach(([key, value]) => {
+            const checkbox = document.querySelector(`input[name="${key}"]`);
+            if (checkbox) {
+                checkbox.checked = value;
+            }
+        });
+
+        // Modo de base de datos
+        const dbMode = document.querySelector(`input[name="dbMode"][value="${config.search.dbMode}"]`);
+        if (dbMode) {
+            dbMode.checked = true;
+        }
+
+        // Configuración SQL
+        Object.entries(config.sql).forEach(([key, value]) => {
+            const input = document.querySelector(`input[name="${key}"]`);
+            if (input) {
+                input.value = value;
+            }
+        });
+
+        // Configuración Elastic
+        if (config.elastic) {
+            // Límites
+            Object.entries(config.elastic.limits).forEach(([key, value]) => {
+                const input = document.querySelector(`input[name="${key}"]`);
+                if (input) {
+                    input.value = value;
+                }
+            });
+
+            // Tipos de búsqueda
+            Object.entries(config.elastic.searchTypes).forEach(([type, settings]) => {
+                // Toggle del tipo de búsqueda
+                const toggle = document.querySelector(`#${type}Search`);
+                const options = document.querySelector(`#${type}Options`);
+                if (toggle) {
+                    toggle.checked = settings.enabled;
+                    if (options) {
+                        options.style.display = settings.enabled ? 'flex' : 'none';
+                    }
+                }
+
+                // Configurar sliders
+                if (type === 'exact') {
+                    const slider = document.querySelector('input[name="exactPriority"]');
+                    if (slider) {
+                        slider.value = settings.priority;
+                        slider.nextElementSibling.querySelector('.value-container').textContent = `${settings.priority}%`;
+                    }
+                } else if (type === 'fuzzy') {
+                    const slider = document.querySelector('input[name="fuzzyTolerance"]');
+                    if (slider) {
+                        slider.value = settings.tolerance;
+                        slider.nextElementSibling.querySelector('.value-container').textContent = `${settings.tolerance}%`;
+                    }
+                } else if (type === 'smart') {
+                    const slider = document.querySelector('input[name="smartPrecision"]');
+                    if (slider) {
+                        slider.value = settings.precision;
+                        slider.nextElementSibling.querySelector('.value-container').textContent = `${settings.precision}%`;
+                    }
+                }
+            });
+
+            // Opciones avanzadas
+            const showAdvancedToggle = document.getElementById('showAdvanced');
+            const advancedOptions = document.getElementById('advancedOptions');
+            if (showAdvancedToggle && advancedOptions) {
+                showAdvancedToggle.checked = config.elastic.showAdvanced;
+                advancedOptions.style.display = config.elastic.showAdvanced ? 'block' : 'none';
+
+                // Configurar opciones avanzadas si están habilitadas
+                if (config.elastic.showAdvanced) {
+                    ['prefix', 'wildcard'].forEach(type => {
+                        const toggle = document.querySelector(`#${type}Search`);
+                        const options = document.querySelector(`#${type}Options`);
+                        if (toggle && options) {
+                            const enabled = config.elastic[`${type}Enabled`];
+                            toggle.checked = enabled;
+                            options.style.display = enabled ? 'flex' : 'none';
+                        }
+                    });
+                }
+            }
+        }
+    }
+
+    async loadSavedApiKeys() {
+        console.log('[ConfigModal] Cargando API keys guardadas...');
+        const providers = ['openai', 'anthropic', 'google'];
+        
+        for (const provider of providers) {
+            const hasKey = await apiKeyService.hasApiKey(provider);
+            const input = document.querySelector(`input[name="${provider}ApiKey"]`);
+            const button = document.querySelector(`button[data-provider="${provider}"].api-key-test`);
+            
+            if (hasKey) {
+                const apiKey = await apiKeyService.getApiKey(provider);
+                if (input) {
+                    input.value = apiKey;
+                    await this.updateApiKeyStatus(provider, true);
+                }
+                if (button) {
+                    button.innerHTML = '<span class="material-icons">delete</span> Borrar';
+                    button.dataset.mode = 'delete';
+                    button.classList.add('delete-mode');
+                }
+            } else {
+                if (button) {
+                    button.innerHTML = '<span class="material-icons">check_circle</span> Probar';
+                    button.dataset.mode = 'test';
+                    button.classList.remove('save-mode', 'delete-mode');
+                }
+                if (input) {
+                    input.value = '';
+                }
+            }
+        }
+    }
+
+    async deleteApiKey(provider) {
+        const button = document.querySelector(`button[data-provider="${provider}"].api-key-test`);
+        const input = document.querySelector(`input[name="${provider}ApiKey"]`);
+        
+        try {
+            button.disabled = true;
+            button.innerHTML = '<span class="material-icons rotating">sync</span> Borrando...';
+            
+            const result = await apiKeyService.deleteApiKey(provider);
+            if (result.success) {
+                input.value = '';
+                this.updateApiKeyStatus(provider, false, 'No configurada');
+                button.innerHTML = '<span class="material-icons">check_circle</span> Probar';
+                button.dataset.mode = 'test';
+                button.classList.remove('delete-mode');
+                notifications.success('API key eliminada correctamente');
+            } else {
+                notifications.error(result.message);
+            }
+        } catch (error) {
+            notifications.error('Error al eliminar la API key');
+        } finally {
+            button.disabled = false;
+        }
+    }
+
+    async saveApiKey(provider, apiKey) {
+        const button = document.querySelector(`button[data-provider="${provider}"].api-key-test`);
+        
+        try {
+            button.disabled = true;
+            button.innerHTML = '<span class="material-icons rotating">sync</span> Guardando...';
+            
+            const result = await apiKeyService.saveApiKey(provider, apiKey);
+            if (result.success) {
+                this.updateApiKeyStatus(provider, true, 'Configurada y validada');
+                button.innerHTML = '<span class="material-icons">delete</span> Borrar';
+                button.dataset.mode = 'delete';
+                button.classList.remove('save-mode');
+                button.classList.add('delete-mode');
+                notifications.success(result.message);
+            } else {
+                notifications.error(result.message);
+                button.innerHTML = '<span class="material-icons">check_circle</span> Probar';
+                button.dataset.mode = 'test';
+                button.classList.remove('save-mode', 'delete-mode');
+            }
+        } catch (error) {
+            notifications.error('Error al guardar la API key');
+            button.innerHTML = '<span class="material-icons">check_circle</span> Probar';
+            button.dataset.mode = 'test';
+            button.classList.remove('save-mode', 'delete-mode');
+        } finally {
+            button.disabled = false;
+        }
+    }
+
+    async testApiKey(provider, apiKey) {
+        if (!apiKey) {
+            this.updateApiKeyStatus(provider, false, 'API key no proporcionada');
+            return;
+        }
+
+        const button = document.querySelector(`button[data-provider="${provider}"].api-key-test`);
+        button.disabled = true;
+        button.innerHTML = '<span class="material-icons rotating">sync</span> Probando...';
+
+        try {
+            const result = await apiKeyService.testApiKey(provider, apiKey);
+            this.updateApiKeyStatus(provider, result.success, result.message);
+            
+            if (result.success) {
+                button.innerHTML = '<span class="material-icons">save</span> Guardar';
+                button.dataset.mode = 'save';
+                button.classList.add('save-mode');
+            } else {
+                button.innerHTML = '<span class="material-icons">check_circle</span> Probar';
+                button.dataset.mode = 'test';
+                button.classList.remove('save-mode');
+            }
+        } catch (error) {
+            this.updateApiKeyStatus(provider, false, 'Error al probar la API key');
+            button.innerHTML = '<span class="material-icons">check_circle</span> Probar';
+            button.dataset.mode = 'test';
+            button.classList.remove('save-mode');
+        } finally {
+            button.disabled = false;
+        }
+    }
+
+    updateApiKeyStatus(provider, isValid, message = '') {
+        const statusContainer = document.querySelector(`input[name="${provider}ApiKey"]`).closest('.api-key-item').querySelector('.api-key-status');
+        const dot = statusContainer.querySelector('.status-dot');
+        const text = statusContainer.querySelector('.status-text');
+
+        if (isValid) {
+            dot.classList.remove('not-configured', 'error');
+            dot.classList.add('configured');
+            text.textContent = 'Configurada y validada';
+            text.classList.remove('error-text');
+        } else {
+            dot.classList.remove('configured');
+            dot.classList.add('not-configured');
+            if (message) {
+                text.textContent = message;
+                dot.classList.add('error');
+                text.classList.add('error-text');
+            } else {
+                text.textContent = 'No configurada';
+                dot.classList.remove('error');
+                text.classList.remove('error-text');
+            }
+        }
+    }
+
+    async exportConfig() {
+        const config = await storage.getConfig();
+        const blob = new Blob([JSON.stringify(config, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'loinc-search-config.json';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    }
+
+    async importConfig() {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = 'application/json';
+        
+        input.onchange = async (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                try {
+                    const text = await file.text();
+                    const config = JSON.parse(text);
+                    await storage.setConfig(config);
+                    await this.loadSavedConfig();
+                } catch (error) {
+                    console.error('[ConfigModal] Error importando configuración:', error);
+                }
+            }
+        };
+        
+        input.click();
+    }
+
+    async restoreDefaults() {
+        if (confirm('¿Estás seguro de que quieres restaurar todos los valores a su configuración por defecto?')) {
+            await storage.resetConfig();
+            await this.loadSavedConfig();
         }
     }
 
     hide() {
-        if (this.modal) {
-            this.modal.classList.remove('visible');
+        this.close();
+    }
+
+    markAsChanged() {
+        this.hasUnsavedChanges = true;
+        const saveButton = document.getElementById('saveConfig');
+        if (saveButton) {
+            saveButton.classList.add('has-changes');
         }
     }
 
-    switchSection(sectionId) {
-        if (!this.navItems || !this.sections) return;
+    resetChangeTracking() {
+        this.hasUnsavedChanges = false;
+        this.hasUnsavedApiKeys = false;
+        const saveButton = document.getElementById('saveConfig');
+        if (saveButton) {
+            saveButton.classList.remove('has-changes');
+        }
+    }
 
-        // Remover clase active de todas las secciones y nav items
-        Object.values(this.sections).forEach(section => {
-            if (section) {
-                section.classList.remove('active');
-                section.style.display = 'none';
+    resetApiKeyInputs() {
+        const providers = ['openai', 'anthropic', 'google'];
+        providers.forEach(provider => {
+            const input = document.querySelector(`input[name="${provider}ApiKey"]`);
+            const button = document.querySelector(`button[data-provider="${provider}"].api-key-test`);
+            if (input && button) {
+                // Limpiar el valor del input
+                input.value = '';
+                // Resetear el estado del botón
+                button.innerHTML = 'Probar';
+                button.classList.remove('save-mode');
+                button.disabled = false;
+                // Resetear el estado visual
+                this.updateApiKeyStatus(provider, false);
             }
         });
-
-        this.navItems.forEach(item => {
-            item.classList.remove('active');
-            item.setAttribute('aria-selected', 'false');
-        });
-
-        // Activar la sección seleccionada
-        const selectedSection = document.getElementById(`${sectionId}Section`);
-        const selectedNavItem = Array.from(this.navItems).find(item => item.dataset.section === sectionId);
-
-        if (selectedSection) {
-            selectedSection.classList.add('active');
-            selectedSection.style.display = 'block';
-            selectedSection.style.opacity = '1';
-        }
-
-        if (selectedNavItem) {
-            selectedNavItem.classList.add('active');
-            selectedNavItem.setAttribute('aria-selected', 'true');
-        }
-
-        // Actualizar OpenAI options si estamos en la sección de búsqueda
-        if (sectionId === 'search') {
-            this.toggleOpenAIOptions();
-        }
+        // Recargar las API keys guardadas después de limpiar
+        this.loadSavedApiKeys();
     }
 
-    toggleOpenAIOptions() {
-        const openaiRadio = document.querySelector('input[name="searchMode"][value="openai"]');
-        const openaiOptions = document.getElementById('openaiOptions');
-        
-        if (openaiOptions) {
-            if (openaiRadio?.checked) {
-                openaiOptions.style.display = 'flex';
-                openaiOptions.style.opacity = '1';
-            } else {
-                openaiOptions.style.display = 'none';
-                openaiOptions.style.opacity = '0';
-            }
-        }
-    }
-
-    async loadConfig() {
-        try {
-            const config = await window.storage.getConfig();
-            if (!config) return;
-
-            // Cargar modo de búsqueda
-            if (config.search?.ontologyMode) {
-                const radio = Array.from(this.searchModeRadios)
-                    .find(r => r.value === config.search.ontologyMode);
-                if (radio) {
-                    radio.checked = true;
-                    this.toggleOpenAIOptions();
+    async saveConfig() {
+        console.log('[ConfigModal] Guardando configuración...');
+        const newConfig = {
+            search: {
+                ontologyMode: document.querySelector('input[name="searchMode"]:checked').value,
+                dbMode: document.querySelector('input[name="dbMode"]:checked').value,
+                openai: {
+                    useOriginalTerm: document.querySelector('input[name="useOriginalTerm"]').checked,
+                    useEnglishTerm: document.querySelector('input[name="useEnglishTerm"]').checked,
+                    useRelatedTerms: document.querySelector('input[name="useRelatedTerms"]').checked,
+                    useTestTypes: document.querySelector('input[name="useTestTypes"]').checked,
+                    useLoincCodes: document.querySelector('input[name="useLoincCodes"]').checked,
+                    useKeywords: document.querySelector('input[name="useKeywords"]').checked
                 }
-            }
-
-            // Cargar modo de base de datos
-            if (config.search?.dbMode) {
-                const radio = Array.from(this.dbModeRadios)
-                    .find(r => r.value === config.search.dbMode);
-                if (radio) {
-                    radio.checked = true;
-                }
-            }
-
-            // Cargar opciones de OpenAI
-            if (config.search?.openai) {
-                const options = config.search.openai;
-                Object.entries(options).forEach(([key, value]) => {
-                    const checkbox = document.querySelector(`#openaiOptions input[name="${key}"]`);
-                    if (checkbox) {
-                        checkbox.checked = value;
-                    }
-                });
-            }
-
-            // Cargar opciones de SQL
-            if (config.sql) {
-                Object.entries(config.sql).forEach(([key, value]) => {
-                    const input = document.querySelector(`#sqlSection input[name="${key}"]`);
-                    if (input) {
-                        if (input.type === 'checkbox') {
-                            input.checked = value;
-                        } else if (input.type === 'number') {
-                            input.value = Math.min(Math.max(value, parseInt(input.min)), parseInt(input.max));
-                        } else {
-                            input.value = value;
-                        }
-                    }
-                });
-            }
-
-            // Cargar opciones de Elastic
-            if (config.elastic) {
-                // Límites
-                if (config.elastic.limits) {
-                    Object.entries(config.elastic.limits).forEach(([key, value]) => {
-                        const input = document.querySelector(`#elasticSection input[name="${key}"]`);
-                        if (input) {
-                            input.value = Math.min(Math.max(value, parseInt(input.min)), parseInt(input.max));
-                            // Actualizar el valor mostrado si es un deslizador
-                            if (input.type === 'range') {
-                                const valueContainer = input.nextElementSibling;
-                                if (valueContainer) {
-                                    valueContainer.textContent = `${input.value}%`;
-                                }
-                            }
-                        }
-                    });
-                }
-
-                // Tipos de búsqueda
-                if (config.elastic.searchTypes) {
-                    Object.entries(config.elastic.searchTypes).forEach(([type, options]) => {
-                        // Checkbox de habilitación
-                        const enabled = document.querySelector(`#elasticSection input[name="${type}Enabled"]`);
-                        if (enabled) {
-                            enabled.checked = options.enabled;
-                        }
-
-                        // Valores específicos por tipo
-                        if (type === 'exact' && options.priority !== undefined) {
-                            const priority = document.querySelector('#elasticSection input[name="exactPriority"]');
-                            if (priority) {
-                                priority.value = Math.min(Math.max(options.priority, 1), 100);
-                                const valueContainer = priority.nextElementSibling;
-                                if (valueContainer) {
-                                    valueContainer.textContent = `${priority.value}%`;
-                                }
-                            }
-                        } else if (type === 'fuzzy' && options.tolerance !== undefined) {
-                            const tolerance = document.querySelector('#elasticSection input[name="fuzzyTolerance"]');
-                            if (tolerance) {
-                                tolerance.value = Math.min(Math.max(options.tolerance, 1), 100);
-                                const valueContainer = tolerance.nextElementSibling;
-                                if (valueContainer) {
-                                    valueContainer.textContent = `${tolerance.value}%`;
-                                }
-                            }
-                        } else if (type === 'smart' && options.precision !== undefined) {
-                            const precision = document.querySelector('#elasticSection input[name="smartPrecision"]');
-                            if (precision) {
-                                precision.value = Math.min(Math.max(options.precision, 1), 100);
-                                const valueContainer = precision.nextElementSibling;
-                                if (valueContainer) {
-                                    valueContainer.textContent = `${precision.value}%`;
-                                }
-                            }
-                        }
-                    });
-                }
-
-                // Configuración avanzada
-                const showAdvanced = document.getElementById('showAdvanced');
-                const advancedOptions = document.getElementById('advancedOptions');
-                if (showAdvanced && advancedOptions) {
-                    showAdvanced.checked = config.elastic.showAdvanced || false;
-                    advancedOptions.style.display = showAdvanced.checked ? 'block' : 'none';
-                }
-            }
-
-            // Cargar API Keys
-            const apiKeys = await window.storage.getApiKeys();
-            if (apiKeys) {
-                Object.entries(apiKeys).forEach(([provider, key]) => {
-                    const input = document.querySelector(`input[name="${provider}Key"]`);
-                    if (input && key) {
-                        input.value = key;
-                        // Actualizar estado si hay key
-                        const statusContainer = input.closest('.api-key-group').querySelector('.key-status');
-                        const statusIndicator = statusContainer.querySelector('.status-indicator');
-                        const statusText = statusContainer.querySelector('.status-text');
-                        this.updateKeyStatus(statusIndicator, statusText, 'configured', 'Configurado');
-                    }
-                });
-            }
-
-            // SQL Search Limits
-            const sqlSearchLimit = config.sql?.useDefaultLimits ? 'default' : 'custom';
-            const sqlSearchLimitRadio = document.querySelector(`input[name="sqlSearchLimit"][value="${sqlSearchLimit}"]`);
-            const sqlMaxTotalInput = document.querySelector('input[name="sqlMaxTotal"]');
-            
-            if (sqlSearchLimitRadio) {
-                sqlSearchLimitRadio.checked = true;
-                if (sqlMaxTotalInput) {
-                    sqlMaxTotalInput.disabled = sqlSearchLimit === 'default';
-                    if (sqlSearchLimit === 'custom') {
-                        sqlMaxTotalInput.value = config.sql.maxTotal || 150;
-                    }
-                }
-            }
-
-            // SQL Mode
-            if (config.sql) {
-                const sqlMode = config.sql.strictMode ? 'strict' : 'flexible';
-                const sqlModeRadio = document.querySelector(`input[name="sqlMode"][value="${sqlMode}"]`);
-                if (sqlModeRadio) {
-                    sqlModeRadio.checked = true;
-                }
-            }
-
-        } catch (error) {
-            console.error('Error cargando la configuración:', error);
-        }
-    }
-
-    async saveAndClose() {
-        try {
-            const config = await window.storage.getConfig() || {
-                search: {
-                    ontologyMode: Array.from(this.searchModeRadios)
-                        .find(r => r.checked)?.value || 'multi_match',
-                    dbMode: Array.from(this.dbModeRadios)
-                        .find(r => r.checked)?.value || 'sql',
-                    openai: {}
-                },
-                sql: {
-                    maxTotal: 150,
-                    maxPerKeyword: 100,
-                    maxKeywords: 10,
-                    strictMode: true
-                },
-                elastic: {
-                    limits: {
-                        maxTotal: 50,
-                        maxPerKeyword: 10
-                    },
-                    searchTypes: {
-                        exact: {
-                            enabled: true,
-                            priority: 10
-                        },
-                        fuzzy: {
-                            enabled: true,
-                            tolerance: 2
-                        },
-                        smart: {
-                            enabled: true,
-                            precision: 7
-                        }
-                    },
-                    showAdvanced: false
-                }
-            };
-
-            console.log('Configuración inicial:', config);
-
-            // Guardar opciones de OpenAI
-            const openaiCheckboxes = document.querySelectorAll('#openaiOptions input[type="checkbox"]');
-            openaiCheckboxes.forEach(checkbox => {
-                config.search.openai[checkbox.name] = checkbox.checked;
-            });
-
-            // Guardar opciones de SQL
-            const sqlInputs = document.querySelectorAll('#sqlSection input');
-            sqlInputs.forEach(input => {
-                if (input.type === 'checkbox') {
-                    config.sql[input.name] = input.checked;
-                } else if (input.type === 'number') {
-                    const value = parseInt(input.value);
-                    const min = parseInt(input.min);
-                    const max = parseInt(input.max);
-                    config.sql[input.name] = Math.min(Math.max(value, min), max);
-                }
-            });
-
-            // Guardar opciones de Elastic
-            config.elastic = {
+            },
+            sql: {
+                maxTotal: parseInt(document.querySelector('input[name="sqlMaxTotal"]').value),
+                maxPerKeyword: parseInt(document.querySelector('input[name="maxPerKeyword"]').value),
+                maxKeywords: parseInt(document.querySelector('input[name="maxKeywords"]').value),
+                strictMode: document.querySelector('input[name="sqlMode"][value="strict"]').checked
+            },
+            elastic: {
                 limits: {
                     maxTotal: parseInt(document.querySelector('#elasticSection input[name="maxTotal"]').value),
                     maxPerKeyword: parseInt(document.querySelector('#elasticSection input[name="maxPerKeyword"]').value)
                 },
                 searchTypes: {
                     exact: {
-                        enabled: document.querySelector('#elasticSection input[name="exactEnabled"]').checked,
-                        priority: parseInt(document.querySelector('#elasticSection input[name="exactPriority"]').value)
+                        enabled: document.querySelector('input[name="exactEnabled"]').checked,
+                        priority: parseInt(document.querySelector('input[name="exactPriority"]').value)
                     },
                     fuzzy: {
-                        enabled: document.querySelector('#elasticSection input[name="fuzzyEnabled"]').checked,
-                        tolerance: parseInt(document.querySelector('#elasticSection input[name="fuzzyTolerance"]').value)
+                        enabled: document.querySelector('input[name="fuzzyEnabled"]').checked,
+                        tolerance: parseInt(document.querySelector('input[name="fuzzyTolerance"]').value)
                     },
                     smart: {
-                        enabled: document.querySelector('#elasticSection input[name="smartEnabled"]').checked,
-                        precision: parseInt(document.querySelector('#elasticSection input[name="smartPrecision"]').value)
+                        enabled: document.querySelector('input[name="smartEnabled"]').checked,
+                        precision: parseInt(document.querySelector('input[name="smartPrecision"]').value)
                     }
                 },
-                showAdvanced: document.getElementById('showAdvanced')?.checked || false
-            };
-
-            // Validar la configuración antes de guardar
-            if (!this.validateConfig(config)) {
-                throw new Error('La configuración no es válida');
-            }
-
-            console.log('Configuración antes de guardar:', JSON.stringify(config, null, 2));
-
-            // Crear backup antes de guardar
-            await window.storage.createBackup();
-
-            // Guardar configuración
-            await window.storage.setConfig(config);
-
-            // Guardar API Keys de forma segura
-            const apiKeys = {};
-            const keyInputs = document.querySelectorAll('.api-key-group input[type="password"]');
-            keyInputs.forEach(input => {
-                const provider = input.name.replace('Key', '');
-                if (input.value) {
-                    apiKeys[provider] = input.value;
-                }
-            });
-            await window.storage.setApiKeys(apiKeys);
-
-            // Obtener cambios y notificar
-            const changes = await this.getConfigChanges(config);
-            window.dispatchEvent(new CustomEvent('configUpdated', { 
-                detail: { 
-                    config,
-                    changes
-                } 
-            }));
-
-            // Cerrar el modal
-            this.hide();
-
-            // Mostrar notificación de éxito
-            notifications.success('Configuración guardada correctamente', 2000);
-
-        } catch (error) {
-            console.error('Error detallado al guardar la configuración:', error);
-            console.log('Estado actual de la configuración:', config);
-            notifications.error('Error al guardar la configuración. Por favor, verifica los valores ingresados.');
-        }
-    }
-
-    validateConfig(config) {
-        try {
-            // Validar modo de búsqueda
-            if (!['multi_match', 'openai'].includes(config.search.ontologyMode)) {
-                return false;
-            }
-
-            // Validar modo de base de datos
-            if (!['sql', 'elastic'].includes(config.search.dbMode)) {
-                return false;
-            }
-
-            // Validar opciones de OpenAI
-            const requiredOpenAIOptions = [
-                'useOriginalTerm',
-                'useEnglishTerm',
-                'useRelatedTerms',
-                'useTestTypes',
-                'useKeywords'
-            ];
-            if (config.search.ontologyMode === 'openai' && 
-                !requiredOpenAIOptions.every(opt => typeof config.search.openai[opt] === 'boolean')) {
-                return false;
-            }
-
-            // Validar opciones de SQL
-            if (typeof config.sql.maxTotal !== 'number' || 
-                typeof config.sql.maxPerKeyword !== 'number' ||
-                typeof config.sql.maxKeywords !== 'number' ||
-                typeof config.sql.strictMode !== 'boolean') {
-                return false;
-            }
-
-            // Validar límites de Elastic
-            if (typeof config.elastic.limits.maxTotal !== 'number' ||
-                typeof config.elastic.limits.maxPerKeyword !== 'number') {
-                return false;
-            }
-
-            // Validar tipos de búsqueda de Elastic
-            const searchTypes = ['exact', 'fuzzy', 'smart'];
-            for (const type of searchTypes) {
-                const options = config.elastic.searchTypes[type];
-                if (typeof options.enabled !== 'boolean') {
-                    return false;
-                }
-
-                if (type === 'exact' && (typeof options.priority !== 'number' || 
-                    options.priority < 1 || options.priority > 10)) {
-                    return false;
-                }
-                if (type === 'fuzzy' && (typeof options.tolerance !== 'number' || 
-                    options.tolerance < 1 || options.tolerance > 5)) {
-                    return false;
-                }
-                if (type === 'smart' && (typeof options.precision !== 'number' || 
-                    options.precision < 1 || options.precision > 100)) {
-                    return false;
-                }
-            }
-
-            return true;
-        } catch (error) {
-            console.error('Error validando la configuración:', error);
-            return false;
-        }
-    }
-
-    async getConfigChanges(newConfig) {
-        const changes = {
-            search: {},
-            sql: {},
-            elastic: {
-                limits: {},
-                searchTypes: {}
+                showAdvanced: document.getElementById('showAdvanced').checked
+            },
+            performance: {
+                maxCacheSize: parseInt(document.querySelector('input[name="maxCacheSize"]').value),
+                cacheExpiry: parseInt(document.querySelector('input[name="cacheExpiry"]').value)
             }
         };
 
         try {
-            const oldConfig = await window.storage.getConfig();
-            if (!oldConfig) return changes;
-
-            // Comparar modo de búsqueda
-            if (oldConfig.search.ontologyMode !== newConfig.search.ontologyMode) {
-                changes.search.ontologyMode = {
-                    old: oldConfig.search.ontologyMode,
-                    new: newConfig.search.ontologyMode
-                };
-            }
-
-            // Comparar opciones de OpenAI
-            Object.entries(newConfig.search.openai).forEach(([key, value]) => {
-                if (oldConfig.search.openai[key] !== value) {
-                    if (!changes.search.openai) changes.search.openai = {};
-                    changes.search.openai[key] = {
-                        old: oldConfig.search.openai[key],
-                        new: value
-                    };
-                }
-            });
-
-            // Comparar opciones de SQL
-            Object.entries(newConfig.sql).forEach(([key, value]) => {
-                if (oldConfig.sql[key] !== value) {
-                    changes.sql[key] = {
-                        old: oldConfig.sql[key],
-                        new: value
-                    };
-                }
-            });
-
-            // Comparar límites de Elastic
-            Object.entries(newConfig.elastic.limits).forEach(([key, value]) => {
-                if (oldConfig.elastic.limits[key] !== value) {
-                    changes.elastic.limits[key] = {
-                        old: oldConfig.elastic.limits[key],
-                        new: value
-                    };
-                }
-            });
-
-            // Comparar tipos de búsqueda de Elastic
-            Object.entries(newConfig.elastic.searchTypes).forEach(([type, options]) => {
-                const oldOptions = oldConfig.elastic.searchTypes[type];
-                const typeChanges = {};
-
-                if (oldOptions.enabled !== options.enabled) {
-                    typeChanges.enabled = {
-                        old: oldOptions.enabled,
-                        new: options.enabled
-                    };
-                }
-
-                if (type === 'exact' && oldOptions.priority !== options.priority) {
-                    typeChanges.priority = {
-                        old: oldOptions.priority,
-                        new: options.priority
-                    };
-                }
-                if (type === 'fuzzy' && oldOptions.tolerance !== options.tolerance) {
-                    typeChanges.tolerance = {
-                        old: oldOptions.tolerance,
-                        new: options.tolerance
-                    };
-                }
-                if (type === 'smart' && oldOptions.precision !== options.precision) {
-                    typeChanges.precision = {
-                        old: oldOptions.precision,
-                        new: options.precision
-                    };
-                }
-
-                if (Object.keys(typeChanges).length > 0) {
-                    changes.elastic.searchTypes[type] = typeChanges;
-                }
-            });
-
-        } catch (error) {
-            console.error('Error obteniendo cambios de configuración:', error);
-        }
-
-        return changes;
-    }
-
-    async deleteOntology() {
-        try {
-            if (confirm('¿Estás seguro de que deseas eliminar todos los datos de ontología? Esta acción no se puede deshacer.')) {
-                // Aquí deberíamos llamar al endpoint correspondiente
-                const response = await fetch('/api/ontology', {
-                    method: 'DELETE'
-                });
-
-                if (response.ok) {
-                    alert('Ontología eliminada correctamente');
-                } else {
-                    throw new Error('Error al eliminar la ontología');
-                }
-            }
-        } catch (error) {
-            console.error('Error eliminando la ontología:', error);
-            alert('Error al eliminar la ontología');
-        }
-    }
-
-    async restoreDefaults() {
-        try {
-            if (!confirm('¿Estás seguro de que deseas restaurar todos los valores a su configuración predeterminada? Esta acción no se puede deshacer.')) {
-                return;
-            }
-
-            console.info('[ConfigModal] Iniciando restauración de valores por defecto');
+            const currentConfig = await storage.getConfig();
+            const hasChanges = JSON.stringify(currentConfig) !== JSON.stringify(newConfig);
             
-            // Intentar resetear la configuración
-            const success = await window.storage.resetConfig();
-            
-            if (success) {
-                console.info('[ConfigModal] Configuración reseteada correctamente');
-                
-                // Recargar la configuración en el modal
-                await this.loadConfig();
-                
-                // Notificar al usuario
-                notifications.success('Configuración restaurada correctamente');
-            } else {
-                throw new Error('No se pudo resetear la configuración');
+            if (hasChanges) {
+                await storage.setConfig(newConfig);
+                notifications.success('Configuración guardada correctamente');
+                this.hasUnsavedChanges = false;
             }
         } catch (error) {
-            console.error('[ConfigModal] Error al restaurar:', error);
-            notifications.error('Error al restaurar los valores por defecto: ' + error.message);
+            console.error('[ConfigModal] Error al guardar:', error);
+            notifications.error('Error al guardar la configuración');
         }
     }
-
-    updateKeyStatus(indicator, text, status, message) {
-        indicator.className = 'status-indicator ' + status;
-        text.textContent = message;
-    }
-
-    async testApiKey(provider, key) {
-        try {
-            // Implementar la lógica de prueba para cada proveedor
-            const response = await fetch('/api/test-key', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ provider, key })
-            });
-
-            const data = await response.json();
-            if (!response.ok) {
-                console.warn(`[ConfigModal] Error en prueba de API key ${provider}:`, data.message);
-            }
-            return { success: response.ok, message: data.message };
-        } catch (error) {
-            console.error(`[ConfigModal] Error de conexión al probar API key ${provider}:`, error);
-            return { success: false, message: 'Error de conexión' };
-        }
-    }
-
-    initializeElasticSection() {
-        // Esperar a que los elementos estén disponibles
-        const waitForElements = (selectors) => {
-            return new Promise((resolve) => {
-                const check = () => {
-                    const elements = selectors.map(selector => document.querySelector(selector));
-                    if (elements.every(el => el)) {
-                        resolve(elements);
-                    } else {
-                        setTimeout(check, 100);
-                    }
-                };
-                check();
-            });
-        };
-
-        const requiredSelectors = [
-            '#maxTotalResults',
-            '#maxPerKeyword',
-            '#exactEnabled',
-            '#exactPriority',
-            '#fuzzyEnabled',
-            '#fuzzyTolerance',
-            '#smartEnabled',
-            '#smartPrecision'
-        ];
-
-        // Inicializar cuando los elementos estén disponibles
-        waitForElements(requiredSelectors).then(([
-            maxTotalSlider,
-            maxKeywordSlider,
-            exactEnabled,
-            exactPriority,
-            fuzzyEnabled,
-            fuzzyTolerance,
-            smartEnabled,
-            smartPrecision
-        ]) => {
-            // Función para actualizar el valor mostrado
-            const updateSliderValue = (slider, valueContainer) => {
-                if (valueContainer) {
-                    valueContainer.textContent = slider.value;
-                }
-            };
-
-            // Inicializar valores desde la configuración
-            const loadElasticConfig = () => {
-                const config = window.storage.getConfig();
-                if (!config?.elastic) return;
-
-                // Límites
-                if (maxTotalSlider && config.elastic.limits?.maxTotal) {
-                    maxTotalSlider.value = config.elastic.limits.maxTotal;
-                    updateSliderValue(maxTotalSlider, maxTotalSlider.nextElementSibling?.querySelector('.value-container'));
-                }
-                
-                if (maxKeywordSlider && config.elastic.limits?.maxPerKeyword) {
-                    maxKeywordSlider.value = config.elastic.limits.maxPerKeyword;
-                    updateSliderValue(maxKeywordSlider, maxKeywordSlider.nextElementSibling?.querySelector('.value-container'));
-                }
-
-                // Tipos de búsqueda
-                if (config.elastic.searchTypes) {
-                    // Búsqueda exacta
-                    if (exactEnabled && exactPriority) {
-                        exactEnabled.checked = config.elastic.searchTypes.exact?.enabled ?? true;
-                        exactPriority.value = config.elastic.searchTypes.exact?.priority || 10;
-                        updateSliderValue(exactPriority, exactPriority.nextElementSibling?.querySelector('.value-container'));
-                    }
-
-                    // Búsqueda difusa
-                    if (fuzzyEnabled && fuzzyTolerance) {
-                        fuzzyEnabled.checked = config.elastic.searchTypes.fuzzy?.enabled ?? true;
-                        fuzzyTolerance.value = config.elastic.searchTypes.fuzzy?.tolerance || 2;
-                        updateSliderValue(fuzzyTolerance, fuzzyTolerance.nextElementSibling?.querySelector('.value-container'));
-                    }
-
-                    // Búsqueda inteligente
-                    if (smartEnabled && smartPrecision) {
-                        smartEnabled.checked = config.elastic.searchTypes.smart?.enabled ?? true;
-                        smartPrecision.value = config.elastic.searchTypes.smart?.precision || 7;
-                        updateSliderValue(smartPrecision, smartPrecision.nextElementSibling?.querySelector('.value-container'));
-                    }
-                }
-            };
-
-            // Guardar configuración cuando cambie
-            const saveElasticConfig = () => {
-                const config = window.storage.getConfig() || {};
-                config.elastic = {
-                    limits: {
-                        maxTotal: parseInt(maxTotalSlider.value),
-                        maxPerKeyword: parseInt(maxKeywordSlider.value)
-                    },
-                    searchTypes: {
-                        exact: {
-                            enabled: exactEnabled.checked,
-                            priority: parseInt(exactPriority.value)
-                        },
-                        fuzzy: {
-                            enabled: fuzzyEnabled.checked,
-                            tolerance: parseInt(fuzzyTolerance.value)
-                        },
-                        smart: {
-                            enabled: smartEnabled.checked,
-                            precision: parseInt(smartPrecision.value)
-                        }
-                    },
-                    showAdvanced: document.getElementById('showAdvanced')?.checked || false
-                };
-                window.storage.setConfig(config);
-            };
-
-            // Event listeners para sliders
-            const sliders = [maxTotalSlider, maxKeywordSlider, exactPriority, fuzzyTolerance, smartPrecision];
-            sliders.forEach(slider => {
-                if (slider) {
-                    slider.addEventListener('input', (e) => {
-                        const valueContainer = e.target.nextElementSibling?.querySelector('.value-container');
-                        if (valueContainer) {
-                            updateSliderValue(e.target, valueContainer);
-                            saveElasticConfig();
-                        }
-                    });
-                }
-            });
-
-            // Event listeners para checkboxes
-            const checkboxes = [exactEnabled, fuzzyEnabled, smartEnabled];
-            checkboxes.forEach(checkbox => {
-                if (checkbox) {
-                    checkbox.addEventListener('change', saveElasticConfig);
-                }
-            });
-
-            // Cargar configuración inicial
-            loadElasticConfig();
-        }).catch(error => {
-            console.error('[ConfigModal] Error en sección Elastic:', error);
-        });
-    }
-
-    // Agregar botón de restaurar backup
-    initializeBackupControls() {
-        const backupBtn = document.createElement('button');
-        backupBtn.textContent = 'Restaurar última configuración';
-        backupBtn.classList.add('backup-btn');
-        backupBtn.addEventListener('click', async () => {
-            if (await window.storage.restoreFromBackup()) {
-                await this.loadConfig();
-                notifications.success('Configuración restaurada correctamente');
-            } else {
-                notifications.warning('No hay backup disponible');
-            }
-        });
-
-        const controlsSection = document.querySelector('.modal-controls');
-        if (controlsSection) {
-            controlsSection.insertBefore(backupBtn, controlsSection.firstChild);
-        }
-    }
-}
-
-// Create and export a singleton instance
-const configModal = new ConfigModal();
-export default configModal; 
+} 

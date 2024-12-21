@@ -236,31 +236,6 @@ class StorageService {
         }
     }
 
-    async getApiKeys() {
-        try {
-            const encryptedKeys = localStorage.getItem('apiKeys');
-            if (!encryptedKeys) return {};
-            
-            const decryptedKeys = await encryption.decrypt(encryptedKeys);
-            return decryptedKeys ? JSON.parse(decryptedKeys) : {};
-        } catch (error) {
-            console.error('Error al obtener API keys:', error);
-            return {};
-        }
-    }
-
-    async setApiKeys(keys) {
-        try {
-            const encryptedKeys = await encryption.encrypt(JSON.stringify(keys));
-            if (encryptedKeys) {
-                localStorage.setItem('apiKeys', encryptedKeys);
-            }
-        } catch (error) {
-            console.error('[Storage] Error al guardar API keys:', error);
-            throw error;
-        }
-    }
-
     async resetConfig() {
         try {
             console.info('[Storage] Reseteando a valores por defecto');
