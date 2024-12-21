@@ -72,10 +72,33 @@ class ApiKeyService {
             console.log(`[ApiKey] Guardando API key encriptada de ${provider}...`);
             localStorage.setItem(`${provider}ApiKey`, encryptedKey);
             
-            return true;
+            return {
+                success: true,
+                message: `API key de ${provider} guardada correctamente`
+            };
         } catch (error) {
             console.error(`[ApiKey] Error guardando API key de ${provider}:`, error);
-            return false;
+            return {
+                success: false,
+                message: `Error guardando API key: ${error.message}`
+            };
+        }
+    }
+
+    async deleteApiKey(provider) {
+        try {
+            console.log(`[ApiKey] Eliminando API key de ${provider}...`);
+            localStorage.removeItem(`${provider}ApiKey`);
+            return {
+                success: true,
+                message: `API key de ${provider} eliminada correctamente`
+            };
+        } catch (error) {
+            console.error(`[ApiKey] Error eliminando API key de ${provider}:`, error);
+            return {
+                success: false,
+                message: `Error eliminando API key: ${error.message}`
+            };
         }
     }
 
@@ -96,6 +119,11 @@ class ApiKeyService {
             console.error(`[ApiKey] Error recuperando API key de ${provider}:`, error);
             return null;
         }
+    }
+
+    async hasApiKey(provider) {
+        const key = await this.getApiKey(provider);
+        return key !== null;
     }
 }
 

@@ -80,12 +80,15 @@ export class ConfigModal {
                 const provider = button.dataset.provider;
                 const input = document.querySelector(`input[name="${provider}ApiKey"]`);
                 
-                if (button.classList.contains('save-mode')) {
-                    // Si está en modo guardar
-                    await this.saveApiKey(provider, input.value);
-                } else {
-                    // Si está en modo probar
-                    await this.testApiKey(provider, input.value);
+                switch(button.dataset.mode) {
+                    case 'delete':
+                        await this.deleteApiKey(provider);
+                        break;
+                    case 'save':
+                        await this.saveApiKey(provider, input.value);
+                        break;
+                    default:
+                        await this.testApiKey(provider, input.value);
                 }
             });
         });
@@ -368,104 +371,88 @@ export class ConfigModal {
         const providers = ['openai', 'anthropic', 'google'];
         
         for (const provider of providers) {
-            const apiKey = await apiKeyService.getApiKey(provider);
-            if (apiKey) {
-                const input = document.querySelector(`input[name="${provider}ApiKey"]`);
+            const hasKey = await apiKeyService.hasApiKey(provider);
+            const input = document.querySelector(`input[name="${provider}ApiKey"]`);
+            const button = document.querySelector(`button[data-provider="${provider}"].api-key-test`);
+            
+            if (hasKey) {
+                const apiKey = await apiKeyService.getApiKey(provider);
                 if (input) {
                     input.value = apiKey;
                     await this.updateApiKeyStatus(provider, true);
+                }
+                if (button) {
+                    button.innerHTML = '<span class="material-icons">delete</span> Borrar';
+                    button.dataset.mode = 'delete';
+                    button.classList.add('delete-mode');
+                }
+            } else {
+                if (button) {
+                    button.innerHTML = '<span class="material-icons">check_circle</span> Probar';
+                    button.dataset.mode = 'test';
+                    button.classList.remove('save-mode', 'delete-mode');
+                }
+                if (input) {
+                    input.value = '';
                 }
             }
         }
     }
 
-    async saveApiKey(provider, apiKey) {
-        console.log(`[ConfigModal] Guardando API key para ${provider}...`);
+    async deleteApiKey(provider) {
         const button = document.querySelector(`button[data-provider="${provider}"].api-key-test`);
-        const originalText = 'Probar';
+        const input = document.querySelector(`input[name="${provider}ApiKey"]`);
         
         try {
             button.disabled = true;
-            button.innerHTML = '<span class="material-icons rotating">sync</span> Guardando...';
+            button.innerHTML = '<span class="material-icons rotating">sync</span> Borrando...';
             
-            await apiKeyService.saveApiKey(provider, apiKey);
-            this.updateApiKeyStatus(provider, true, 'Configurada y validada');
-            this.hasUnsavedApiKeys = false;
-            
-            // Restaurar el botón a "Probar"
-            button.innerHTML = originalText;
-            button.classList.remove('save-mode');
-            
-            notifications.success('API key guardada correctamente');
+            const result = await apiKeyService.deleteApiKey(provider);
+            if (result.success) {
+                input.value = '';
+                this.updateApiKeyStatus(provider, false, 'No configurada');
+                button.innerHTML = '<span class="material-icons">check_circle</span> Probar';
+                button.dataset.mode = 'test';
+                button.classList.remove('delete-mode');
+                notifications.success('API key eliminada correctamente');
+            } else {
+                notifications.error(result.message);
+            }
         } catch (error) {
-            console.error(`[ConfigModal] Error guardando API key ${provider}:`, error);
-            this.updateApiKeyStatus(provider, false, 'Error al guardar la API key');
-            notifications.error('Error al guardar la API key');
-            
-            // Restaurar el botón a "Probar"
-            button.innerHTML = originalText;
-            button.classList.remove('save-mode');
+            notifications.error('Error al eliminar la API key');
         } finally {
             button.disabled = false;
         }
     }
 
-    async saveConfig() {
-        console.log('[ConfigModal] Guardando configuración...');
-        const newConfig = {
-            search: {
-                ontologyMode: document.querySelector('input[name="searchMode"]:checked').value,
-                dbMode: document.querySelector('input[name="dbMode"]:checked').value,
-                openai: {
-                    useOriginalTerm: document.querySelector('input[name="useOriginalTerm"]').checked,
-                    useEnglishTerm: document.querySelector('input[name="useEnglishTerm"]').checked,
-                    useRelatedTerms: document.querySelector('input[name="useRelatedTerms"]').checked,
-                    useTestTypes: document.querySelector('input[name="useTestTypes"]').checked,
-                    useLoincCodes: document.querySelector('input[name="useLoincCodes"]').checked,
-                    useKeywords: document.querySelector('input[name="useKeywords"]').checked
-                }
-            },
-            sql: {
-                maxTotal: parseInt(document.querySelector('input[name="sqlMaxTotal"]').value),
-                maxPerKeyword: parseInt(document.querySelector('input[name="maxPerKeyword"]').value),
-                maxKeywords: parseInt(document.querySelector('input[name="maxKeywords"]').value),
-                strictMode: document.querySelector('input[name="sqlMode"][value="strict"]').checked
-            },
-            elastic: {
-                limits: {
-                    maxTotal: parseInt(document.querySelector('#elasticSection input[name="maxTotal"]').value),
-                    maxPerKeyword: parseInt(document.querySelector('#elasticSection input[name="maxPerKeyword"]').value)
-                },
-                searchTypes: {
-                    exact: {
-                        enabled: document.querySelector('input[name="exactEnabled"]').checked,
-                        priority: parseInt(document.querySelector('input[name="exactPriority"]').value)
-                    },
-                    fuzzy: {
-                        enabled: document.querySelector('input[name="fuzzyEnabled"]').checked,
-                        tolerance: parseInt(document.querySelector('input[name="fuzzyTolerance"]').value)
-                    },
-                    smart: {
-                        enabled: document.querySelector('input[name="smartEnabled"]').checked,
-                        precision: parseInt(document.querySelector('input[name="smartPrecision"]').value)
-                    }
-                },
-                showAdvanced: document.getElementById('showAdvanced').checked
-            }
-        };
-
+    async saveApiKey(provider, apiKey) {
+        const button = document.querySelector(`button[data-provider="${provider}"].api-key-test`);
+        
         try {
-            const currentConfig = await storage.getConfig();
-            const hasChanges = JSON.stringify(currentConfig) !== JSON.stringify(newConfig);
+            button.disabled = true;
+            button.innerHTML = '<span class="material-icons rotating">sync</span> Guardando...';
             
-            if (hasChanges) {
-                await storage.setConfig(newConfig);
-                notifications.success('Configuración guardada correctamente');
-                this.hasUnsavedChanges = false;
+            const result = await apiKeyService.saveApiKey(provider, apiKey);
+            if (result.success) {
+                this.updateApiKeyStatus(provider, true, 'Configurada y validada');
+                button.innerHTML = '<span class="material-icons">delete</span> Borrar';
+                button.dataset.mode = 'delete';
+                button.classList.remove('save-mode');
+                button.classList.add('delete-mode');
+                notifications.success(result.message);
+            } else {
+                notifications.error(result.message);
+                button.innerHTML = '<span class="material-icons">check_circle</span> Probar';
+                button.dataset.mode = 'test';
+                button.classList.remove('save-mode', 'delete-mode');
             }
         } catch (error) {
-            console.error('[ConfigModal] Error al guardar:', error);
-            notifications.error('Error al guardar la configuración');
+            notifications.error('Error al guardar la API key');
+            button.innerHTML = '<span class="material-icons">check_circle</span> Probar';
+            button.dataset.mode = 'test';
+            button.classList.remove('save-mode', 'delete-mode');
+        } finally {
+            button.disabled = false;
         }
     }
 
@@ -476,25 +463,27 @@ export class ConfigModal {
         }
 
         const button = document.querySelector(`button[data-provider="${provider}"].api-key-test`);
-        const originalText = button.innerHTML;
-        button.innerHTML = '<span class="material-icons rotating">sync</span> Probando...';
         button.disabled = true;
+        button.innerHTML = '<span class="material-icons rotating">sync</span> Probando...';
 
         try {
             const result = await apiKeyService.testApiKey(provider, apiKey);
             this.updateApiKeyStatus(provider, result.success, result.message);
             
             if (result.success) {
-                // Cambiar el botón a "Guardar"
-                button.innerHTML = 'Guardar';
+                button.innerHTML = '<span class="material-icons">save</span> Guardar';
+                button.dataset.mode = 'save';
                 button.classList.add('save-mode');
-                this.hasUnsavedApiKeys = true;
             } else {
-                button.innerHTML = originalText;
+                button.innerHTML = '<span class="material-icons">check_circle</span> Probar';
+                button.dataset.mode = 'test';
+                button.classList.remove('save-mode');
             }
         } catch (error) {
-            button.innerHTML = originalText;
             this.updateApiKeyStatus(provider, false, 'Error al probar la API key');
+            button.innerHTML = '<span class="material-icons">check_circle</span> Probar';
+            button.dataset.mode = 'test';
+            button.classList.remove('save-mode');
         } finally {
             button.disabled = false;
         }
@@ -606,5 +595,68 @@ export class ConfigModal {
         });
         // Recargar las API keys guardadas después de limpiar
         this.loadSavedApiKeys();
+    }
+
+    async saveConfig() {
+        console.log('[ConfigModal] Guardando configuración...');
+        const newConfig = {
+            search: {
+                ontologyMode: document.querySelector('input[name="searchMode"]:checked').value,
+                dbMode: document.querySelector('input[name="dbMode"]:checked').value,
+                openai: {
+                    useOriginalTerm: document.querySelector('input[name="useOriginalTerm"]').checked,
+                    useEnglishTerm: document.querySelector('input[name="useEnglishTerm"]').checked,
+                    useRelatedTerms: document.querySelector('input[name="useRelatedTerms"]').checked,
+                    useTestTypes: document.querySelector('input[name="useTestTypes"]').checked,
+                    useLoincCodes: document.querySelector('input[name="useLoincCodes"]').checked,
+                    useKeywords: document.querySelector('input[name="useKeywords"]').checked
+                }
+            },
+            sql: {
+                maxTotal: parseInt(document.querySelector('input[name="sqlMaxTotal"]').value),
+                maxPerKeyword: parseInt(document.querySelector('input[name="maxPerKeyword"]').value),
+                maxKeywords: parseInt(document.querySelector('input[name="maxKeywords"]').value),
+                strictMode: document.querySelector('input[name="sqlMode"][value="strict"]').checked
+            },
+            elastic: {
+                limits: {
+                    maxTotal: parseInt(document.querySelector('#elasticSection input[name="maxTotal"]').value),
+                    maxPerKeyword: parseInt(document.querySelector('#elasticSection input[name="maxPerKeyword"]').value)
+                },
+                searchTypes: {
+                    exact: {
+                        enabled: document.querySelector('input[name="exactEnabled"]').checked,
+                        priority: parseInt(document.querySelector('input[name="exactPriority"]').value)
+                    },
+                    fuzzy: {
+                        enabled: document.querySelector('input[name="fuzzyEnabled"]').checked,
+                        tolerance: parseInt(document.querySelector('input[name="fuzzyTolerance"]').value)
+                    },
+                    smart: {
+                        enabled: document.querySelector('input[name="smartEnabled"]').checked,
+                        precision: parseInt(document.querySelector('input[name="smartPrecision"]').value)
+                    }
+                },
+                showAdvanced: document.getElementById('showAdvanced').checked
+            },
+            performance: {
+                maxCacheSize: parseInt(document.querySelector('input[name="maxCacheSize"]').value),
+                cacheExpiry: parseInt(document.querySelector('input[name="cacheExpiry"]').value)
+            }
+        };
+
+        try {
+            const currentConfig = await storage.getConfig();
+            const hasChanges = JSON.stringify(currentConfig) !== JSON.stringify(newConfig);
+            
+            if (hasChanges) {
+                await storage.setConfig(newConfig);
+                notifications.success('Configuración guardada correctamente');
+                this.hasUnsavedChanges = false;
+            }
+        } catch (error) {
+            console.error('[ConfigModal] Error al guardar:', error);
+            notifications.error('Error al guardar la configuración');
+        }
     }
 } 
