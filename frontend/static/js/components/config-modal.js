@@ -143,6 +143,52 @@ class ConfigModal {
             });
         }
 
+        // Toggle longitud mínima
+        const prefixSearchCheckbox = document.getElementById('prefixSearch');
+        const prefixLengthOptions = document.getElementById('prefixLengthOptions');
+        if (prefixSearchCheckbox && prefixLengthOptions) {
+            prefixSearchCheckbox.addEventListener('change', () => {
+                prefixLengthOptions.style.display = prefixSearchCheckbox.checked ? 'block' : 'none';
+            });
+        }
+
+        // Toggle búsqueda con comodines
+        const wildcardSearchCheckbox = document.getElementById('wildcardSearch');
+        const wildcardOptions = document.getElementById('wildcardOptions');
+        if (wildcardSearchCheckbox && wildcardOptions) {
+            wildcardSearchCheckbox.addEventListener('change', () => {
+                wildcardOptions.style.display = wildcardSearchCheckbox.checked ? 'block' : 'none';
+            });
+        }
+
+        // Toggle búsqueda con expresiones regulares
+        const regexSearchCheckbox = document.getElementById('regexSearch');
+        const regexOptions = document.getElementById('regexOptions');
+        if (regexSearchCheckbox && regexOptions) {
+            regexSearchCheckbox.addEventListener('change', () => {
+                regexOptions.style.display = regexSearchCheckbox.checked ? 'block' : 'none';
+            });
+        }
+
+        // Toggle tipos de búsqueda
+        const searchTypes = [
+            { checkbox: 'exactSearch', options: 'exactOptions' },
+            { checkbox: 'fuzzySearch', options: 'fuzzyOptions' },
+            { checkbox: 'smartSearch', options: 'smartOptions' }
+        ];
+
+        searchTypes.forEach(type => {
+            const checkbox = document.getElementById(type.checkbox);
+            const options = document.getElementById(type.options);
+            if (checkbox && options) {
+                checkbox.addEventListener('change', () => {
+                    options.style.display = checkbox.checked ? 'block' : 'none';
+                });
+                // Inicializar estado
+                options.style.display = checkbox.checked ? 'block' : 'none';
+            }
+        });
+
         // Search mode change
         this.searchModeRadios?.forEach(radio => {
             radio.addEventListener('change', () => {
@@ -166,8 +212,13 @@ class ConfigModal {
             }
         });
 
-        this.restoreDefaultsButton?.addEventListener('click', () => {
-            this.restoreDefaults();
+        this.restoreDefaultsButton?.addEventListener('click', async () => {
+            try {
+                await this.restoreDefaults();
+            } catch (error) {
+                console.error('[ConfigModal] Error al restaurar:', error);
+                notifications.error('Error al restaurar los valores por defecto');
+            }
         });
 
         // Close on outside click or escape key

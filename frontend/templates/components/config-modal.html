@@ -74,7 +74,7 @@
                                             <input type="checkbox" name="useRelatedTerms" checked>
                                             <div class="checkbox-content">
                                                 <div class="checkbox-title">Usar términos relacionados</div>
-                                                <div class="checkbox-description">Incluir términos relacionados en la búsqueda</div>
+                                                <div class="checkbox-description">Incluir términos médicos relacionados</div>
                                             </div>
                                         </label>
                                     </div>
@@ -83,7 +83,7 @@
                                             <input type="checkbox" name="useTestTypes" checked>
                                             <div class="checkbox-content">
                                                 <div class="checkbox-title">Usar tipos de prueba</div>
-                                                <div class="checkbox-description">Incluir tipos de prueba relacionados</div>
+                                                <div class="checkbox-description">Incluir tipos de pruebas médicas relacionadas</div>
                                             </div>
                                         </label>
                                         <label class="checkbox-option">
@@ -97,7 +97,7 @@
                                             <input type="checkbox" name="useKeywords" checked>
                                             <div class="checkbox-content">
                                                 <div class="checkbox-title">Usar palabras clave</div>
-                                                <div class="checkbox-description">Incluir palabras clave relacionadas</div>
+                                                <div class="checkbox-description">Incluir palabras clave médicas relevantes</div>
                                             </div>
                                         </label>
                                     </div>
@@ -140,13 +140,24 @@
                     </div>
                     <div class="radio-group">
                         <label class="checkbox-option">
+                            <input type="number" name="sqlMaxTotal" min="1" max="1000" value="150">
                             <div class="checkbox-content">
-                                <div class="checkbox-title">Límite de resultados</div>
+                                <div class="checkbox-title">Límite total de resultados</div>
                                 <div class="checkbox-description">Número máximo de resultados a mostrar</div>
-                                <div class="input-number-container">
-                                    <input type="number" name="sqlMaxTotal" min="1" max="1000" value="150">
-                                    <span class="unit">resultados</span>
-                                </div>
+                            </div>
+                        </label>
+                        <label class="checkbox-option">
+                            <input type="number" name="maxKeywords" min="1" max="20" value="5">
+                            <div class="checkbox-content">
+                                <div class="checkbox-title">Máximo de palabras clave</div>
+                                <div class="checkbox-description">Número máximo de palabras clave a procesar</div>
+                            </div>
+                        </label>
+                        <label class="checkbox-option">
+                            <input type="number" name="maxPerKeyword" min="1" max="100" value="20">
+                            <div class="checkbox-content">
+                                <div class="checkbox-title">Resultados por palabra</div>
+                                <div class="checkbox-description">Número máximo de resultados por cada palabra clave</div>
                             </div>
                         </label>
                     </div>
@@ -185,23 +196,17 @@
                     </div>
                     <div class="radio-group">
                         <label class="checkbox-option">
+                            <input type="number" name="maxTotal" min="1" max="1000" value="150">
                             <div class="checkbox-content">
                                 <div class="checkbox-title">Límite total de resultados</div>
                                 <div class="checkbox-description">Define el número máximo total de resultados</div>
-                                <div class="input-number-container">
-                                    <input type="number" name="maxTotal" min="1" max="1000" value="150">
-                                    <span class="unit">resultados</span>
-                                </div>
                             </div>
                         </label>
                         <label class="checkbox-option">
+                            <input type="number" name="maxPerKeyword" min="1" max="100" value="20">
                             <div class="checkbox-content">
                                 <div class="checkbox-title">Límite por palabra clave</div>
                                 <div class="checkbox-description">Define el número máximo de resultados por cada palabra clave</div>
-                                <div class="input-number-container">
-                                    <input type="number" name="maxPerKeyword" min="1" max="100" value="20">
-                                    <span class="unit">resultados</span>
-                                </div>
                             </div>
                         </label>
                     </div>
@@ -214,40 +219,67 @@
                     </div>
                     <div class="radio-group">
                         <label class="checkbox-option">
-                            <input type="checkbox" id="exactSearch" name="exactEnabled" checked>
                             <div class="checkbox-content">
-                                <div class="checkbox-title">Búsqueda Exacta</div>
-                                <div class="checkbox-description">Encuentra coincidencias exactas con el término buscado</div>
-                                <div class="slider-control">
-                                    <span>Prioridad</span>
-                                    <input type="range" name="exactPriority" min="0" max="100" value="75">
-                                    <span class="value-container">75%</span>
+                                <div class="header-flex">
+                                    <div class="header-text">
+                                        <div class="checkbox-title">Búsqueda Exacta</div>
+                                        <div class="checkbox-description">Encuentra coincidencias exactas con el término buscado</div>
+                                    </div>
+                                    <div class="toggle-container">
+                                        <input type="checkbox" id="exactSearch" name="exactEnabled" class="toggle-checkbox" checked>
+                                        <label for="exactSearch" class="toggle-switch"></label>
+                                    </div>
+                                </div>
+                                <div id="exactOptions" class="slider-control" style="width: 100%;">
+                                    <input type="range" name="exactPriority" min="0" max="100" value="75" style="width: 100%;">
+                                    <div class="slider-text">
+                                        <div class="slider-label">Prioridad</div>
+                                        <span class="value-container">75%</span>
+                                    </div>
                                 </div>
                             </div>
                         </label>
 
                         <label class="checkbox-option">
-                            <input type="checkbox" id="fuzzySearch" name="fuzzyEnabled" checked>
                             <div class="checkbox-content">
-                                <div class="checkbox-title">Búsqueda Aproximada</div>
-                                <div class="checkbox-description">Encuentra términos similares, tolerando errores tipográficos</div>
-                                <div class="slider-control">
-                                    <span>Tolerancia</span>
-                                    <input type="range" name="fuzzyTolerance" min="0" max="100" value="50">
-                                    <span class="value-container">50%</span>
+                                <div class="header-flex">
+                                    <div class="header-text">
+                                        <div class="checkbox-title">Búsqueda Aproximada</div>
+                                        <div class="checkbox-description">Encuentra términos similares, tolerando errores tipográficos</div>
+                                    </div>
+                                    <div class="toggle-container">
+                                        <input type="checkbox" id="fuzzySearch" name="fuzzyEnabled" class="toggle-checkbox" checked>
+                                        <label for="fuzzySearch" class="toggle-switch"></label>
+                                    </div>
+                                </div>
+                                <div id="fuzzyOptions" class="slider-control" style="width: 100%;">
+                                    <input type="range" name="fuzzyTolerance" min="0" max="100" value="50" style="width: 100%;">
+                                    <div class="slider-text">
+                                        <div class="slider-label">Tolerancia</div>
+                                        <span class="value-container">50%</span>
+                                    </div>
                                 </div>
                             </div>
                         </label>
 
                         <label class="checkbox-option">
-                            <input type="checkbox" id="smartSearch" name="smartEnabled" checked>
                             <div class="checkbox-content">
-                                <div class="checkbox-title">Búsqueda Inteligente</div>
-                                <div class="checkbox-description">Búsqueda avanzada con análisis semántico</div>
-                                <div class="slider-control">
-                                    <span>Precisión</span>
-                                    <input type="range" name="smartPrecision" min="0" max="100" value="75">
-                                    <span class="value-container">75%</span>
+                                <div class="header-flex">
+                                    <div class="header-text">
+                                        <div class="checkbox-title">Búsqueda Inteligente</div>
+                                        <div class="checkbox-description">Búsqueda avanzada con análisis semántico</div>
+                                    </div>
+                                    <div class="toggle-container">
+                                        <input type="checkbox" id="smartSearch" name="smartEnabled" class="toggle-checkbox" checked>
+                                        <label for="smartSearch" class="toggle-switch"></label>
+                                    </div>
+                                </div>
+                                <div id="smartOptions" class="slider-control" style="width: 100%;">
+                                    <input type="range" name="smartPrecision" min="0" max="100" value="75" style="width: 100%;">
+                                    <div class="slider-text">
+                                        <div class="slider-label">Precisión</div>
+                                        <span class="value-container">75%</span>
+                                    </div>
                                 </div>
                             </div>
                         </label>
@@ -256,24 +288,32 @@
 
                 <div class="option-group">
                     <div class="section-header">
-                        <div class="header-with-toggle">
-                            <h3>Configuración Avanzada</h3>
+                        <div class="header-flex">
+                            <div class="header-text">
+                                <h3>Configuración Avanzada</h3>
+                                <small class="info-text">Opciones adicionales para búsquedas especializadas</small>
+                            </div>
                             <div class="toggle-container">
                                 <input type="checkbox" id="showAdvanced" class="toggle-checkbox">
-                                <label for="showAdvanced" class="toggle-label">Mostrar opciones avanzadas</label>
+                                <label for="showAdvanced" class="toggle-switch"></label>
                             </div>
                         </div>
-                        <small class="info-text">Opciones adicionales para búsquedas especializadas</small>
                     </div>
                     <div id="advancedOptions" style="display: none;">
                         <div class="radio-group">
                             <label class="checkbox-option">
-                                <input type="checkbox" id="prefixSearch" name="prefixEnabled">
                                 <div class="checkbox-content">
-                                    <div class="checkbox-title">Búsqueda por Prefijo</div>
-                                    <div class="checkbox-description">Encuentra términos que comienzan con el texto ingresado</div>
-                                    <div class="param-controls">
-                                        <span>Longitud mínima</span>
+                                    <div class="header-flex">
+                                        <div class="header-text">
+                                            <div class="checkbox-title">Longitud Mínima</div>
+                                            <div class="checkbox-description">Número mínimo de caracteres para activar la búsqueda por prefijo</div>
+                                        </div>
+                                        <div class="toggle-container">
+                                            <input type="checkbox" id="prefixSearch" name="prefixEnabled" class="toggle-checkbox">
+                                            <label for="prefixSearch" class="toggle-switch"></label>
+                                        </div>
+                                    </div>
+                                    <div id="prefixLengthOptions" class="input-number-container" style="display: none;">
                                         <input type="number" name="prefixMinLength" min="1" max="10" value="3">
                                         <span class="unit">caracteres</span>
                                     </div>
@@ -281,27 +321,42 @@
                             </label>
 
                             <label class="checkbox-option">
-                                <input type="checkbox" id="wildcardSearch" name="wildcardEnabled">
                                 <div class="checkbox-content">
-                                    <div class="checkbox-title">Búsqueda con Comodines</div>
-                                    <div class="checkbox-description">Usa caracteres comodín (* o ?) en la búsqueda</div>
-                                    <div class="param-controls">
-                                        <span>Máximo de comodines</span>
+                                    <div class="header-flex">
+                                        <div class="header-text">
+                                            <div class="checkbox-title">Búsqueda con Comodines</div>
+                                            <div class="checkbox-description">Usa caracteres comodín (* o ?) en la búsqueda</div>
+                                        </div>
+                                        <div class="toggle-container">
+                                            <input type="checkbox" id="wildcardSearch" name="wildcardEnabled" class="toggle-checkbox">
+                                            <label for="wildcardSearch" class="toggle-switch"></label>
+                                        </div>
+                                    </div>
+                                    <div id="wildcardOptions" class="input-number-container" style="display: none;">
                                         <input type="number" name="maxWildcards" min="1" max="5" value="2">
-                                        <span class="unit">por término</span>
+                                        <span class="unit">comodines</span>
                                     </div>
                                 </div>
                             </label>
 
                             <label class="checkbox-option">
-                                <input type="checkbox" id="regexSearch" name="regexEnabled">
                                 <div class="checkbox-content">
-                                    <div class="checkbox-title">Búsqueda con Expresiones Regulares</div>
-                                    <div class="checkbox-description">Usa expresiones regulares para búsquedas avanzadas</div>
-                                    <div class="slider-control">
-                                        <span>Complejidad</span>
-                                        <input type="range" name="regexComplexity" min="0" max="100" value="50">
-                                        <span class="value-container">50%</span>
+                                    <div class="header-flex">
+                                        <div class="header-text">
+                                            <div class="checkbox-title">Búsqueda con Expresiones Regulares</div>
+                                            <div class="checkbox-description">Usa expresiones regulares para búsquedas avanzadas</div>
+                                        </div>
+                                        <div class="toggle-container">
+                                            <input type="checkbox" id="regexSearch" name="regexEnabled" class="toggle-checkbox">
+                                            <label for="regexSearch" class="toggle-switch"></label>
+                                        </div>
+                                    </div>
+                                    <div id="regexOptions" class="slider-control" style="display: none; width: 100%;">
+                                        <input type="range" name="regexComplexity" min="0" max="100" value="50" style="width: 100%;">
+                                        <div class="slider-text">
+                                            <div class="slider-label">Complejidad</div>
+                                            <span class="value-container">50%</span>
+                                        </div>
                                     </div>
                                 </div>
                             </label>
