@@ -1,13 +1,21 @@
 .logo {
-    margin-bottom: 20px;
+    margin-bottom: 25px;
+    transform: translateY(-10px);
 }
 
 .logo-text {
-    font-family: 'Product Sans', Arial, sans-serif;
-    font-size: 92px;
-    letter-spacing: -3px;
-    height: 100px;
-    line-height: 100px;
+    font-family: 'Product Sans', 'Google Sans', Arial, sans-serif;
+    font-size: 85px;
+    letter-spacing: -2px;
+    height: 92px;
+    line-height: 92px;
+    font-weight: 550;
+}
+
+.logo-text span {
+    display: inline-block;
+    transform-origin: center;
+    margin: 0 1px;
 }
 
 .logo-text span:nth-child(1) { color: #4285f4; }
@@ -28,15 +36,21 @@
     align-items: center;
     height: 44px;
     background: #fff;
-    border: 1px solid #dfe1e5;
+    border: 1px solid transparent;
     border-radius: 24px;
     padding: 0 8px;
+    transition: all 0.2s ease;
+    box-shadow: 0 3px 8px rgba(32, 33, 36, 0.28);
 }
 
-.search-box:hover,
+.search-box:hover {
+    background-color: #fff;
+    box-shadow: 0 1px 6px rgba(32, 33, 36, 0.20);
+}
+
 .search-box:focus-within {
-    box-shadow: 0 1px 6px rgb(32 33 36 / 28%);
-    border-color: transparent;
+    background-color: #fff;
+    box-shadow: 0 1px 6px rgba(32, 33, 36, 0.20);
 }
 
 .search-icon {
@@ -105,9 +119,10 @@
 
 @media (max-width: 600px) {
     .logo-text {
-        font-size: 70px;
-        height: 76px;
-        line-height: 76px;
+        font-size: 64px;
+        height: 70px;
+        line-height: 70px;
+        letter-spacing: -2px;
     }
 
     .search-container {
