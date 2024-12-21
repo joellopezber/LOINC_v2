@@ -125,6 +125,7 @@ Frontend:
 - Componentes modulares
 - BEM para CSS
 - Nombres en español (camelCase)
+- Usar Google Material Design
 
 Backend:
 - PEP 8
