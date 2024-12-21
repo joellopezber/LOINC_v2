@@ -6,6 +6,32 @@ class EncryptionService {
         this.initialize();
     }
 
+    // Función auxiliar para convertir ArrayBuffer a Base64 de forma segura
+    arrayBufferToBase64(buffer) {
+        const bytes = new Uint8Array(buffer);
+        let binary = '';
+        const chunkSize = 0x8000; // Procesar en chunks para evitar stack overflow
+        
+        for (let i = 0; i < bytes.length; i += chunkSize) {
+            const chunk = bytes.slice(i, i + chunkSize);
+            binary += String.fromCharCode.apply(null, chunk);
+        }
+        
+        return btoa(binary);
+    }
+
+    // Función auxiliar para convertir Base64 a ArrayBuffer de forma segura
+    base64ToArrayBuffer(base64) {
+        const binaryString = atob(base64);
+        const bytes = new Uint8Array(binaryString.length);
+        
+        for (let i = 0; i < binaryString.length; i++) {
+            bytes[i] = binaryString.charCodeAt(i);
+        }
+        
+        return bytes.buffer;
+    }
+
     async initialize() {
         try {
             let masterKey = localStorage.getItem('masterKey');
@@ -44,7 +70,7 @@ class EncryptionService {
             {
                 name: 'HKDF',
                 hash: 'SHA-256',
-                salt: new TextEncoder().encode(salt),
+                salt: salt, // Usar el salt directamente como Uint8Array
                 info: new Uint8Array([])
             },
             this.masterKey,
@@ -58,7 +84,7 @@ class EncryptionService {
         try {
             console.log('[Encryption] Iniciando encriptación...');
             const salt = crypto.getRandomValues(new Uint8Array(16));
-            const key = await this.deriveKey(new TextDecoder().decode(salt));
+            const key = await this.deriveKey(salt); // Pasar salt directamente
             const iv = crypto.getRandomValues(new Uint8Array(12));
             
             console.log('[Encryption] Encriptando datos...');
@@ -68,14 +94,14 @@ class EncryptionService {
                 new TextEncoder().encode(text)
             );
 
-            // Combinar salt + iv + contenido encriptado
+            // Combinar salt + iv + contenido encriptado de forma segura
             const result = new Uint8Array(salt.length + iv.length + encryptedContent.byteLength);
             result.set(salt, 0);
             result.set(iv, salt.length);
             result.set(new Uint8Array(encryptedContent), salt.length + iv.length);
 
             console.log('[Encryption] Datos encriptados correctamente');
-            return btoa(String.fromCharCode.apply(null, result));
+            return this.arrayBufferToBase64(result.buffer);
         } catch (error) {
             console.error('[Encryption] Error en encriptación:', error);
             return null;
@@ -85,7 +111,7 @@ class EncryptionService {
     async decrypt(encryptedData) {
         try {
             console.log('[Encryption] Iniciando desencriptación...');
-            const data = new Uint8Array(atob(encryptedData).split('').map(c => c.charCodeAt(0)));
+            const data = new Uint8Array(this.base64ToArrayBuffer(encryptedData));
             
             // Extraer componentes
             const salt = data.slice(0, 16);
@@ -93,7 +119,7 @@ class EncryptionService {
             const content = data.slice(28);
 
             console.log('[Encryption] Derivando clave para desencriptación...');
-            const key = await this.deriveKey(new TextDecoder().decode(salt));
+            const key = await this.deriveKey(salt); // Pasar salt directamente
 
             console.log('[Encryption] Desencriptando datos...');
             const decryptedContent = await crypto.subtle.decrypt(
