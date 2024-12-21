@@ -16,10 +16,13 @@
 /* Secciones del modal */
 .config-modal .config-section {
     display: none;
+    opacity: 0;
+    transition: opacity 0.3s ease;
 }
 
 .config-modal .config-section.active {
     display: block;
+    opacity: 1;
 }
 
 .config-modal.visible {
@@ -878,4 +881,183 @@
 
 .toggle-checkbox:checked + .toggle-switch::after {
     transform: translateX(20px);
+}
+
+/* Estilos para la sección de IA */
+.api-key-input {
+    margin-top: 10px;
+    width: 100%;
+}
+
+.api-input {
+    width: 100%;
+    padding: 8px 12px;
+    border: 1px solid #dadce0;
+    border-radius: 4px;
+    font-size: 14px;
+    color: #3c4043;
+    background-color: #fff;
+    transition: border-color 0.2s ease;
+}
+
+.api-input:focus {
+    outline: none;
+    border-color: #1a73e8;
+}
+
+.api-input::placeholder {
+    color: #80868b;
+}
+
+/* Ajustes para el icono de IA */
+.nav-item[data-section="ai"] .material-icons {
+    font-size: 24px;
+}
+
+/* Estilos para la sección de API Keys */
+.api-keys-container {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.api-key-item {
+    background: #f8f9fa;
+    border-radius: 8px;
+    padding: 16px;
+    border: 1px solid #e0e0e0;
+    transition: all 0.2s ease;
+}
+
+.api-key-item:hover {
+    border-color: #dadce0;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.api-key-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+}
+
+.api-key-info {
+    flex: 1;
+}
+
+.api-key-title {
+    font-size: 1rem;
+    font-weight: 500;
+    color: #1f1f1f;
+    margin-bottom: 4px;
+}
+
+.api-key-description {
+    font-size: 0.85rem;
+    color: #5f6368;
+}
+
+.api-key-status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 12px;
+    border-radius: 16px;
+    background: #f1f3f4;
+}
+
+.status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+}
+
+.status-dot.configured {
+    background-color: #34a853;
+}
+
+.status-dot.not-configured {
+    background-color: #ea4335;
+}
+
+.status-text {
+    font-size: 0.85rem;
+    color: #5f6368;
+}
+
+.api-key-input-group {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.api-key-input {
+    flex: 1;
+    padding: 8px 12px;
+    border: 2px solid #dadce0;
+    border-radius: 6px;
+    font-size: 0.9rem;
+    color: #1f1f1f;
+    background: white;
+    transition: all 0.2s ease;
+}
+
+.api-key-input:focus {
+    outline: none;
+    border-color: #1a73e8;
+    box-shadow: 0 0 0 2px rgba(26, 115, 232, 0.1);
+}
+
+.api-key-toggle,
+.api-key-test {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 8px;
+    border: none;
+    border-radius: 6px;
+    background: #f1f3f4;
+    color: #5f6368;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.api-key-toggle:hover,
+.api-key-test:hover {
+    background: #e8eaed;
+    color: #1f1f1f;
+}
+
+.api-key-test {
+    display: flex;
+    gap: 4px;
+    padding: 8px 16px;
+    background: #1a73e8;
+    color: white;
+}
+
+.api-key-test:hover {
+    background: #1557b0;
+    color: white;
+}
+
+.api-key-test .material-icons {
+    font-size: 18px;
+}
+
+/* Ajustes para el icono de API Keys */
+.nav-item[data-section="apikeys"] .material-icons {
+    font-size: 20px;
+}
+
+/* Ajustes específicos para las nuevas secciones */
+#apikeysSection,
+#aiSection {
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+#apikeysSection.active,
+#aiSection.active {
+    opacity: 1;
 }

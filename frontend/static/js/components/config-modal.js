@@ -66,7 +66,9 @@ class ConfigModal {
             search: document.getElementById('searchSection'),
             elastic: document.getElementById('elasticSection'),
             sql: document.getElementById('sqlSection'),
-            config: document.getElementById('configSection')
+            config: document.getElementById('configSection'),
+            apikeys: document.getElementById('apikeysSection'),
+            ai: document.getElementById('aiSection')
         };
         
         // Search options
@@ -356,12 +358,13 @@ class ConfigModal {
         });
 
         // Activar la sección seleccionada
-        const selectedSection = this.sections[sectionId];
+        const selectedSection = document.getElementById(`${sectionId}Section`);
         const selectedNavItem = Array.from(this.navItems).find(item => item.dataset.section === sectionId);
 
         if (selectedSection) {
             selectedSection.classList.add('active');
             selectedSection.style.display = 'block';
+            selectedSection.style.opacity = '1';
         }
 
         if (selectedNavItem) {
