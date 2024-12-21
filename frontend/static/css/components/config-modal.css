@@ -16,10 +16,13 @@
 /* Secciones del modal */
 .config-modal .config-section {
     display: none;
+    opacity: 0;
+    transition: opacity 0.3s ease;
 }
 
 .config-modal .config-section.active {
     display: block;
+    opacity: 1;
 }
 
 .config-modal.visible {
@@ -42,7 +45,7 @@
 
 /* Header */
 .config-modal .modal-header {
-    padding: 24px 28px;
+    padding: 16px 20px;
     border-bottom: 1px solid #e0e0e0;
     background: #ffffff;
 }
@@ -55,7 +58,7 @@
 
 .config-modal .header-content h2 {
     margin: 0;
-    font-size: 1.75rem;
+    font-size: 1.5rem;
     color: #1f1f1f;
     font-weight: 500;
     letter-spacing: -0.01em;
@@ -112,7 +115,7 @@
 
 /* Body */
 .config-modal .modal-body {
-    padding: 24px;
+    padding: 16px;
     overflow-y: auto;
     flex: 1;
     background: #f8f9fa;
@@ -122,104 +125,37 @@
 .config-modal .option-group {
     background: #ffffff;
     border-radius: 12px;
-    padding: 24px;
-    margin-bottom: 24px;
+    padding: 16px;
+    margin-bottom: 16px;
     box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
 }
 
-/* Radio Button Groups - Nuevo estilo mejorado */
+/* Radio Button Groups */
 .config-modal .radio-group {
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: 8px;
 }
 
 .config-modal .radio-option {
-    display: flex;
-    align-items: center;
-    padding: 16px;
+    padding: 12px;
     background: #f8f9fa;
     border-radius: 8px;
-    cursor: pointer;
-    transition: all 0.2s;
-    border: 1px solid transparent;
-}
-
-.config-modal .radio-option:hover {
-    background: #f1f3f4;
-    border-color: #e0e0e0;
-}
-
-.config-modal .radio-option input[type="radio"],
-.config-modal .radio-option input[type="checkbox"] {
-    -webkit-appearance: none;
-    -moz-appearance: none;
-    appearance: none;
-    width: 18px;
-    height: 18px;
-    border: 2px solid #1a73e8;
-    border-radius: 50%;
-    outline: none;
-    cursor: pointer;
-    margin: 0;
-    position: relative;
-    background: white;
-    transition: all 0.2s ease;
-}
-
-.config-modal .radio-option input[type="radio"]:checked,
-.config-modal .radio-option input[type="checkbox"]:checked {
-    background: #1a73e8;
-    border-color: #1a73e8;
-}
-
-.config-modal .radio-option input[type="radio"]:checked::after,
-.config-modal .radio-option input[type="checkbox"]:checked::after {
-    content: '';
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    background: white;
-}
-
-.config-modal .radio-option input[type="radio"]:hover,
-.config-modal .radio-option input[type="checkbox"]:hover {
-    border-color: #1557b0;
-    box-shadow: 0 0 0 2px rgba(26, 115, 232, 0.1);
-}
-
-.config-modal .radio-option input[type="radio"]:focus,
-.config-modal .radio-option input[type="checkbox"]:focus {
-    box-shadow: 0 0 0 2px rgba(26, 115, 232, 0.2);
-}
-
-.config-modal .radio-content {
-    margin-left: 12px;
-    flex: 1;
 }
 
 .config-modal .radio-title {
-    font-size: 1.1rem;
-    color: #1f1f1f;
-    font-weight: 500;
-    margin: 0;
-    display: inline-block;
+    font-size: 1rem;
+    margin-bottom: 2px;
 }
 
 .config-modal .radio-description {
-    display: block;
-    color: #5f6368;
-    font-size: 0.9rem;
-    margin-top: 4px;
+    font-size: 0.85rem;
+    margin-top: 2px;
 }
 
 /* Footer */
 .config-modal .modal-footer {
-    padding: 20px 24px;
+    padding: 16px 20px;
     border-top: 1px solid #e0e0e0;
     display: flex;
     justify-content: flex-end;
@@ -229,9 +165,9 @@
 
 .config-modal .btn-close,
 .config-modal .btn-save {
-    padding: 10px 24px;
+    padding: 8px 20px;
     border-radius: 8px;
-    font-size: 0.95rem;
+    font-size: 0.9rem;
     font-weight: 500;
     cursor: pointer;
     transition: all 0.2s;
@@ -422,6 +358,36 @@
     height: 18px;
     cursor: pointer;
     accent-color: #1a73e8;
+    appearance: none;
+    border: 2px solid #5f6368;
+    border-radius: 50%;
+    position: relative;
+    transition: all 0.2s ease;
+}
+
+.config-modal input[type="checkbox"]:checked,
+.config-modal input[type="radio"]:checked {
+    background-color: #1a73e8;
+    border-color: #1a73e8;
+}
+
+.config-modal input[type="checkbox"]:checked::after,
+.config-modal input[type="radio"]:checked::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 10px;
+    height: 10px;
+    background-color: white;
+    border-radius: 50%;
+}
+
+.config-modal input[type="checkbox"]:hover,
+.config-modal input[type="radio"]:hover {
+    border-color: #1a73e8;
+    box-shadow: 0 0 0 4px rgba(26, 115, 232, 0.1);
 }
 
 /* Ajustes para los controles dentro de radio-content */
@@ -442,7 +408,7 @@
 .config-modal .action-item {
     display: flex;
     align-items: center;
-    padding: 16px;
+    padding: 12px;
     background: #f8f9fa;
     border-radius: 8px;
     cursor: pointer;
@@ -457,7 +423,7 @@
 
 .config-modal .action-item .btn-action {
     margin: 0;
-    padding: 8px 16px;
+    padding: 6px 12px;
     background: none;
     border: 2px solid #1a73e8;
     border-radius: 6px;
@@ -486,7 +452,7 @@
     margin-left: 12px;
     flex: 1;
     color: #5f6368;
-    font-size: 0.9rem;
+    font-size: 0.85rem;
 }
 
 /* Input groups en configuración */
@@ -564,18 +530,18 @@
 
 /* Ajuste de espaciado para secciones */
 .config-modal .section-header {
-    margin-bottom: 16px;
+    margin-bottom: 12px;
 }
 
 .config-modal .section-header h3 {
-    font-size: 1.2rem;
+    font-size: 1.1rem;
     color: #1f1f1f;
-    margin: 0 0 4px 0;
+    margin: 0 0 2px 0;
 }
 
 .config-modal .section-header small.info-text {
     color: #5f6368;
-    font-size: 0.9rem;
+    font-size: 0.85rem;
 }
 
 /* Switch Toggle */
@@ -664,8 +630,8 @@
     display: flex;
     align-items: center;
     gap: 8px;
-    margin-top: 12px;
-    padding: 12px;
+    margin-top: 8px;
+    padding: 8px;
     background: #f8f9fa;
     border-radius: 8px;
     width: auto;
@@ -673,10 +639,10 @@
 
 .config-modal input[type="number"] {
     width: 80px;
-    padding: 8px 12px;
+    padding: 6px 8px;
     border: 2px solid #1a73e8;
     border-radius: 6px;
-    font-size: 1rem;
+    font-size: 0.9rem;
     color: #1f1f1f;
     background: white;
     transition: all 0.2s ease;
@@ -751,4 +717,347 @@
 
 .config-modal .close-button .material-icons {
     font-size: 24px;
+}
+
+/* OpenAI Options */
+.config-modal .radio-content .checkbox-group {
+    margin-top: 12px;
+    padding: 12px;
+    background: #f8f9fa;
+    border-radius: 8px;
+    border: 1px solid #e0e0e0;
+    display: flex;
+    gap: 16px;
+    opacity: 1;
+    transition: opacity 0.3s ease;
+}
+
+.config-modal .checkbox-column {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.config-modal .checkbox-option {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 8px;
+    transition: all 0.2s;
+}
+
+.config-modal .checkbox-content {
+    flex: 1;
+}
+
+.config-modal .checkbox-title {
+    font-size: 0.9rem;
+    color: #1f1f1f;
+    font-weight: 500;
+    margin-bottom: 2px;
+}
+
+.config-modal .checkbox-description {
+    font-size: 0.85rem;
+    color: #5f6368;
+}
+
+/* Animación para mostrar/ocultar opciones */
+.config-modal #openaiOptions {
+    overflow: hidden;
+    transition: all 0.3s ease;
+}
+
+.config-modal #openaiOptions:not([style*="display: none"]) {
+    animation: slideDown 0.3s ease;
+}
+
+@keyframes slideDown {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.backup-btn {
+    background-color: #4a5568;
+    color: white;
+    padding: 8px 16px;
+    border: none;
+    border-radius: 4px;
+    margin-right: 12px;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.backup-btn:hover {
+    background-color: #2d3748;
+}
+
+.backup-btn:active {
+    background-color: #1a202c;
+}
+
+/* Estilo para indicador de estado de API key */
+.key-status {
+    display: flex;
+    align-items: center;
+    margin-left: 8px;
+}
+
+.status-indicator {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    margin-right: 4px;
+}
+
+.status-indicator.configured {
+    background-color: #48bb78;
+}
+
+.status-indicator.not-configured {
+    background-color: #e53e3e;
+}
+
+.status-text {
+    font-size: 12px;
+    color: #718096;
+}
+
+/* Header con switch */
+.header-flex {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+}
+
+.header-text {
+    flex: 1;
+}
+
+/* Switch styles */
+.toggle-container {
+    display: flex;
+    align-items: center;
+}
+
+.toggle-switch {
+    position: relative;
+    display: inline-block;
+    width: 40px;
+    height: 20px;
+    background-color: #ccc;
+    border-radius: 20px;
+    transition: background-color 0.3s;
+    cursor: pointer;
+}
+
+.toggle-switch::after {
+    content: '';
+    position: absolute;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background-color: white;
+    top: 2px;
+    left: 2px;
+    transition: transform 0.3s;
+}
+
+.toggle-checkbox {
+    display: none;
+}
+
+.toggle-checkbox:checked + .toggle-switch {
+    background-color: #1a73e8;
+}
+
+.toggle-checkbox:checked + .toggle-switch::after {
+    transform: translateX(20px);
+}
+
+/* Estilos para la sección de IA */
+.api-key-input {
+    margin-top: 10px;
+    width: 100%;
+}
+
+.api-input {
+    width: 100%;
+    padding: 8px 12px;
+    border: 1px solid #dadce0;
+    border-radius: 4px;
+    font-size: 14px;
+    color: #3c4043;
+    background-color: #fff;
+    transition: border-color 0.2s ease;
+}
+
+.api-input:focus {
+    outline: none;
+    border-color: #1a73e8;
+}
+
+.api-input::placeholder {
+    color: #80868b;
+}
+
+/* Ajustes para el icono de IA */
+.nav-item[data-section="ai"] .material-icons {
+    font-size: 24px;
+}
+
+/* Estilos para la sección de API Keys */
+.api-keys-container {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.api-key-item {
+    background: #f8f9fa;
+    border-radius: 8px;
+    padding: 16px;
+    border: 1px solid #e0e0e0;
+    transition: all 0.2s ease;
+}
+
+.api-key-item:hover {
+    border-color: #dadce0;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.api-key-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+}
+
+.api-key-info {
+    flex: 1;
+}
+
+.api-key-title {
+    font-size: 1rem;
+    font-weight: 500;
+    color: #1f1f1f;
+    margin-bottom: 4px;
+}
+
+.api-key-description {
+    font-size: 0.85rem;
+    color: #5f6368;
+}
+
+.api-key-status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 12px;
+    border-radius: 16px;
+    background: #f1f3f4;
+}
+
+.status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+}
+
+.status-dot.configured {
+    background-color: #34a853;
+}
+
+.status-dot.not-configured {
+    background-color: #ea4335;
+}
+
+.status-text {
+    font-size: 0.85rem;
+    color: #5f6368;
+}
+
+.api-key-input-group {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.api-key-input {
+    flex: 1;
+    padding: 8px 12px;
+    border: 2px solid #dadce0;
+    border-radius: 6px;
+    font-size: 0.9rem;
+    color: #1f1f1f;
+    background: white;
+    transition: all 0.2s ease;
+}
+
+.api-key-input:focus {
+    outline: none;
+    border-color: #1a73e8;
+    box-shadow: 0 0 0 2px rgba(26, 115, 232, 0.1);
+}
+
+.api-key-toggle,
+.api-key-test {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 8px;
+    border: none;
+    border-radius: 6px;
+    background: #f1f3f4;
+    color: #5f6368;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.api-key-toggle:hover,
+.api-key-test:hover {
+    background: #e8eaed;
+    color: #1f1f1f;
+}
+
+.api-key-test {
+    display: flex;
+    gap: 4px;
+    padding: 8px 16px;
+    background: #1a73e8;
+    color: white;
+}
+
+.api-key-test:hover {
+    background: #1557b0;
+    color: white;
+}
+
+.api-key-test .material-icons {
+    font-size: 18px;
+}
+
+/* Ajustes para el icono de API Keys */
+.nav-item[data-section="apikeys"] .material-icons {
+    font-size: 20px;
+}
+
+/* Ajustes específicos para las nuevas secciones */
+#apikeysSection,
+#aiSection {
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+#apikeysSection.active,
+#aiSection.active {
+    opacity: 1;
 }

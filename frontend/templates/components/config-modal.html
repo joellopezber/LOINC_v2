@@ -29,6 +29,14 @@
                 <span class="material-icons">settings</span>
                 <span>Config</span>
             </button>
+            <button class="nav-item" data-section="apikeys">
+                <span class="material-icons">vpn_key</span>
+                <span>API Keys</span>
+            </button>
+            <button class="nav-item" data-section="ai">
+                <span class="material-icons">psychology</span>
+                <span>IA</span>
+            </button>
         </div>
 
         <!-- Body -->
@@ -36,89 +44,95 @@
             <!-- Search Section -->
             <div class="config-section active" id="searchSection">
                 <div class="option-group">
-                    <h3>Modo de Búsqueda</h3>
+                    <div class="section-header">
+                        <h3>Modo de Búsqueda</h3>
+                        <small class="info-text">Selecciona el método de búsqueda para los términos médicos</small>
+                    </div>
                     <div class="radio-group">
-                        <label class="radio-option">
+                        <label class="checkbox-option">
                             <input type="radio" name="searchMode" value="multi_match" checked>
-                            <div class="radio-content">
-                                <div class="radio-title">Multi Match</div>
-                                <div class="radio-description">Búsqueda directa en la base de datos utilizando coincidencia múltiple</div>
+                            <div class="checkbox-content">
+                                <div class="checkbox-title">Multi Match</div>
+                                <div class="checkbox-description">Búsqueda directa en la base de datos utilizando coincidencia múltiple</div>
                             </div>
                         </label>
-                        <label class="radio-option">
+                        <label class="checkbox-option">
                             <input type="radio" name="searchMode" value="openai">
-                            <div class="radio-content">
-                                <div class="radio-title">OpenAI</div>
-                                <div class="radio-description">Búsqueda asistida por IA utilizando OpenAI</div>
+                            <div class="checkbox-content">
+                                <div class="checkbox-title">OpenAI</div>
+                                <div class="checkbox-description">Búsqueda asistida por IA utilizando OpenAI</div>
+                                <!-- OpenAI Options -->
+                                <div id="openaiOptions" class="checkbox-group" style="display: none;">
+                                    <div class="checkbox-column">
+                                        <label class="checkbox-option">
+                                            <input type="checkbox" name="useOriginalTerm" checked>
+                                            <div class="checkbox-content">
+                                                <div class="checkbox-title">Usar término original</div>
+                                                <div class="checkbox-description">Incluir el término de búsqueda original</div>
+                                            </div>
+                                        </label>
+                                        <label class="checkbox-option">
+                                            <input type="checkbox" name="useEnglishTerm" checked>
+                                            <div class="checkbox-content">
+                                                <div class="checkbox-title">Usar término en inglés</div>
+                                                <div class="checkbox-description">Traducir y usar el término en inglés</div>
+                                            </div>
+                                        </label>
+                                        <label class="checkbox-option">
+                                            <input type="checkbox" name="useRelatedTerms" checked>
+                                            <div class="checkbox-content">
+                                                <div class="checkbox-title">Usar términos relacionados</div>
+                                                <div class="checkbox-description">Incluir términos médicos relacionados</div>
+                                            </div>
+                                        </label>
+                                    </div>
+                                    <div class="checkbox-column">
+                                        <label class="checkbox-option">
+                                            <input type="checkbox" name="useTestTypes" checked>
+                                            <div class="checkbox-content">
+                                                <div class="checkbox-title">Usar tipos de prueba</div>
+                                                <div class="checkbox-description">Incluir tipos de pruebas médicas relacionadas</div>
+                                            </div>
+                                        </label>
+                                        <label class="checkbox-option">
+                                            <input type="checkbox" name="useLoincCodes" checked>
+                                            <div class="checkbox-content">
+                                                <div class="checkbox-title">Usar códigos LOINC</div>
+                                                <div class="checkbox-description">Incluir códigos LOINC relacionados</div>
+                                            </div>
+                                        </label>
+                                        <label class="checkbox-option">
+                                            <input type="checkbox" name="useKeywords" checked>
+                                            <div class="checkbox-content">
+                                                <div class="checkbox-title">Usar palabras clave</div>
+                                                <div class="checkbox-description">Incluir palabras clave médicas relevantes</div>
+                                            </div>
+                                        </label>
+                                    </div>
+                                </div>
                             </div>
                         </label>
                     </div>
                 </div>
 
                 <div class="option-group">
-                    <h3>Base de Datos</h3>
-                    <div class="radio-group">
-                        <label class="radio-option">
-                            <input type="radio" name="dbMode" value="sql" checked>
-                            <div class="radio-content">
-                                <div class="radio-title">SQL</div>
-                                <div class="radio-description">Búsqueda en base de datos SQL para resultados precisos</div>
-                            </div>
-                        </label>
-                        <label class="radio-option">
-                            <input type="radio" name="dbMode" value="elastic">
-                            <div class="radio-content">
-                                <div class="radio-title">Elasticsearch</div>
-                                <div class="radio-description">Búsqueda avanzada con Elasticsearch para mayor flexibilidad</div>
-                            </div>
-                        </label>
+                    <div class="section-header">
+                        <h3>Base de Datos</h3>
+                        <small class="info-text">Elige el motor de base de datos para realizar las búsquedas</small>
                     </div>
-                </div>
-
-                <!-- OpenAI Options -->
-                <div id="openaiOptions" class="option-group" style="display: none;">
-                    <h3>Opciones de OpenAI</h3>
-                    <div class="checkbox-group">
+                    <div class="radio-group">
                         <label class="checkbox-option">
-                            <input type="checkbox" name="useOriginalTerm" checked>
+                            <input type="radio" name="dbMode" value="sql" checked>
                             <div class="checkbox-content">
-                                <div class="checkbox-title">Usar término original</div>
-                                <div class="checkbox-description">Incluir el término de búsqueda original</div>
+                                <div class="checkbox-title">SQL</div>
+                                <div class="checkbox-description">Búsqueda en base de datos SQL para resultados precisos</div>
                             </div>
                         </label>
                         <label class="checkbox-option">
-                            <input type="checkbox" name="useEnglishTerm" checked>
+                            <input type="radio" name="dbMode" value="elastic">
                             <div class="checkbox-content">
-                                <div class="checkbox-title">Usar término en inglés</div>
-                                <div class="checkbox-description">Traducir y usar el término en inglés</div>
-                            </div>
-                        </label>
-                        <label class="checkbox-option">
-                            <input type="checkbox" name="useRelatedTerms" checked>
-                            <div class="checkbox-content">
-                                <div class="checkbox-title">Usar términos relacionados</div>
-                                <div class="checkbox-description">Incluir términos relacionados en la búsqueda</div>
-                            </div>
-                        </label>
-                        <label class="checkbox-option">
-                            <input type="checkbox" name="useTestTypes" checked>
-                            <div class="checkbox-content">
-                                <div class="checkbox-title">Usar tipos de prueba</div>
-                                <div class="checkbox-description">Incluir tipos de prueba relacionados</div>
-                            </div>
-                        </label>
-                        <label class="checkbox-option">
-                            <input type="checkbox" name="useLoincCodes" checked>
-                            <div class="checkbox-content">
-                                <div class="checkbox-title">Usar códigos LOINC</div>
-                                <div class="checkbox-description">Incluir códigos LOINC relacionados</div>
-                            </div>
-                        </label>
-                        <label class="checkbox-option">
-                            <input type="checkbox" name="useKeywords" checked>
-                            <div class="checkbox-content">
-                                <div class="checkbox-title">Usar palabras clave</div>
-                                <div class="checkbox-description">Incluir palabras clave relacionadas</div>
+                                <div class="checkbox-title">Elasticsearch</div>
+                                <div class="checkbox-description">Búsqueda avanzada con Elasticsearch para mayor flexibilidad</div>
                             </div>
                         </label>
                     </div>
@@ -133,14 +147,25 @@
                         <small class="info-text">Configura los límites generales de la búsqueda SQL</small>
                     </div>
                     <div class="radio-group">
-                        <label class="radio-option">
-                            <div class="radio-content">
-                                <div class="radio-title">Límite de resultados</div>
-                                <div class="radio-description">Número máximo de resultados a mostrar</div>
-                                <div class="input-number-container">
-                                    <input type="number" name="sqlMaxTotal" min="1" max="1000" value="150">
-                                    <span class="unit">resultados</span>
-                                </div>
+                        <label class="checkbox-option">
+                            <input type="number" name="sqlMaxTotal" min="1" max="1000" value="150">
+                            <div class="checkbox-content">
+                                <div class="checkbox-title">Límite total de resultados</div>
+                                <div class="checkbox-description">Número máximo de resultados a mostrar</div>
+                            </div>
+                        </label>
+                        <label class="checkbox-option">
+                            <input type="number" name="maxKeywords" min="1" max="20" value="5">
+                            <div class="checkbox-content">
+                                <div class="checkbox-title">Máximo de palabras clave</div>
+                                <div class="checkbox-description">Número máximo de palabras clave a procesar</div>
+                            </div>
+                        </label>
+                        <label class="checkbox-option">
+                            <input type="number" name="maxPerKeyword" min="1" max="100" value="20">
+                            <div class="checkbox-content">
+                                <div class="checkbox-title">Resultados por palabra</div>
+                                <div class="checkbox-description">Número máximo de resultados por cada palabra clave</div>
                             </div>
                         </label>
                     </div>
@@ -152,18 +177,18 @@
                         <small class="info-text">Configura la precisión de la búsqueda SQL</small>
                     </div>
                     <div class="radio-group">
-                        <label class="radio-option">
+                        <label class="checkbox-option">
                             <input type="radio" name="sqlMode" value="strict" checked>
-                            <div class="radio-content">
-                                <div class="radio-title">Modo Estricto</div>
-                                <div class="radio-description">Activa la búsqueda de coincidencias exactas para resultados más precisos</div>
+                            <div class="checkbox-content">
+                                <div class="checkbox-title">Modo Estricto</div>
+                                <div class="checkbox-description">Activa la búsqueda de coincidencias exactas para resultados más precisos</div>
                             </div>
                         </label>
-                        <label class="radio-option">
+                        <label class="checkbox-option">
                             <input type="radio" name="sqlMode" value="flexible">
-                            <div class="radio-content">
-                                <div class="radio-title">Modo Flexible</div>
-                                <div class="radio-description">Permite variaciones y coincidencias parciales en las búsquedas</div>
+                            <div class="checkbox-content">
+                                <div class="checkbox-title">Modo Flexible</div>
+                                <div class="checkbox-description">Permite variaciones y coincidencias parciales en las búsquedas</div>
                             </div>
                         </label>
                     </div>
@@ -178,24 +203,18 @@
                         <small class="info-text">Configura los límites generales de búsqueda</small>
                     </div>
                     <div class="radio-group">
-                        <label class="radio-option">
-                            <div class="radio-content">
-                                <div class="radio-title">Límite total de resultados</div>
-                                <div class="radio-description">Define el número máximo total de resultados</div>
-                                <div class="input-number-container">
-                                    <input type="number" name="maxTotal" min="1" max="1000" value="150">
-                                    <span class="unit">resultados</span>
-                                </div>
+                        <label class="checkbox-option">
+                            <input type="number" name="maxTotal" min="1" max="1000" value="150">
+                            <div class="checkbox-content">
+                                <div class="checkbox-title">Límite total de resultados</div>
+                                <div class="checkbox-description">Define el número máximo total de resultados</div>
                             </div>
                         </label>
-                        <label class="radio-option">
-                            <div class="radio-content">
-                                <div class="radio-title">Límite por palabra clave</div>
-                                <div class="radio-description">Define el número máximo de resultados por cada palabra clave</div>
-                                <div class="input-number-container">
-                                    <input type="number" name="maxPerKeyword" min="1" max="100" value="20">
-                                    <span class="unit">resultados</span>
-                                </div>
+                        <label class="checkbox-option">
+                            <input type="number" name="maxPerKeyword" min="1" max="100" value="20">
+                            <div class="checkbox-content">
+                                <div class="checkbox-title">Límite por palabra clave</div>
+                                <div class="checkbox-description">Define el número máximo de resultados por cada palabra clave</div>
                             </div>
                         </label>
                     </div>
@@ -207,41 +226,68 @@
                         <small class="info-text">Configura los diferentes métodos de búsqueda disponibles</small>
                     </div>
                     <div class="radio-group">
-                        <label class="radio-option">
-                            <input type="checkbox" id="exactSearch" name="exactEnabled" checked>
-                            <div class="radio-content">
-                                <div class="radio-title">Búsqueda Exacta</div>
-                                <div class="radio-description">Encuentra coincidencias exactas con el término buscado</div>
-                                <div class="slider-control">
-                                    <span>Prioridad</span>
-                                    <input type="range" name="exactPriority" min="0" max="100" value="75">
-                                    <span class="value-container">75%</span>
+                        <label class="checkbox-option">
+                            <div class="checkbox-content">
+                                <div class="header-flex">
+                                    <div class="header-text">
+                                        <div class="checkbox-title">Búsqueda Exacta</div>
+                                        <div class="checkbox-description">Encuentra coincidencias exactas con el término buscado</div>
+                                    </div>
+                                    <div class="toggle-container">
+                                        <input type="checkbox" id="exactSearch" name="exactEnabled" class="toggle-checkbox" checked>
+                                        <label for="exactSearch" class="toggle-switch"></label>
+                                    </div>
+                                </div>
+                                <div id="exactOptions" class="slider-control" style="width: 100%;">
+                                    <input type="range" name="exactPriority" min="0" max="100" value="75" style="width: 100%;">
+                                    <div class="slider-text">
+                                        <div class="slider-label">Prioridad</div>
+                                        <span class="value-container">75%</span>
+                                    </div>
                                 </div>
                             </div>
                         </label>
 
-                        <label class="radio-option">
-                            <input type="checkbox" id="fuzzySearch" name="fuzzyEnabled" checked>
-                            <div class="radio-content">
-                                <div class="radio-title">Búsqueda Aproximada</div>
-                                <div class="radio-description">Encuentra términos similares, tolerando errores tipográficos</div>
-                                <div class="slider-control">
-                                    <span>Tolerancia</span>
-                                    <input type="range" name="fuzzyTolerance" min="0" max="100" value="50">
-                                    <span class="value-container">50%</span>
+                        <label class="checkbox-option">
+                            <div class="checkbox-content">
+                                <div class="header-flex">
+                                    <div class="header-text">
+                                        <div class="checkbox-title">Búsqueda Aproximada</div>
+                                        <div class="checkbox-description">Encuentra términos similares, tolerando errores tipográficos</div>
+                                    </div>
+                                    <div class="toggle-container">
+                                        <input type="checkbox" id="fuzzySearch" name="fuzzyEnabled" class="toggle-checkbox" checked>
+                                        <label for="fuzzySearch" class="toggle-switch"></label>
+                                    </div>
+                                </div>
+                                <div id="fuzzyOptions" class="slider-control" style="width: 100%;">
+                                    <input type="range" name="fuzzyTolerance" min="0" max="100" value="50" style="width: 100%;">
+                                    <div class="slider-text">
+                                        <div class="slider-label">Tolerancia</div>
+                                        <span class="value-container">50%</span>
+                                    </div>
                                 </div>
                             </div>
                         </label>
 
-                        <label class="radio-option">
-                            <input type="checkbox" id="smartSearch" name="smartEnabled" checked>
-                            <div class="radio-content">
-                                <div class="radio-title">Búsqueda Inteligente</div>
-                                <div class="radio-description">Búsqueda avanzada con análisis semántico</div>
-                                <div class="slider-control">
-                                    <span>Precisión</span>
-                                    <input type="range" name="smartPrecision" min="0" max="100" value="75">
-                                    <span class="value-container">75%</span>
+                        <label class="checkbox-option">
+                            <div class="checkbox-content">
+                                <div class="header-flex">
+                                    <div class="header-text">
+                                        <div class="checkbox-title">Búsqueda Inteligente</div>
+                                        <div class="checkbox-description">Búsqueda avanzada con análisis semántico</div>
+                                    </div>
+                                    <div class="toggle-container">
+                                        <input type="checkbox" id="smartSearch" name="smartEnabled" class="toggle-checkbox" checked>
+                                        <label for="smartSearch" class="toggle-switch"></label>
+                                    </div>
+                                </div>
+                                <div id="smartOptions" class="slider-control" style="width: 100%;">
+                                    <input type="range" name="smartPrecision" min="0" max="100" value="75" style="width: 100%;">
+                                    <div class="slider-text">
+                                        <div class="slider-label">Precisión</div>
+                                        <span class="value-container">75%</span>
+                                    </div>
                                 </div>
                             </div>
                         </label>
@@ -250,56 +296,265 @@
 
                 <div class="option-group">
                     <div class="section-header">
-                        <div class="header-with-toggle">
-                            <h3>Configuración Avanzada</h3>
+                        <div class="header-flex">
+                            <div class="header-text">
+                                <h3>Configuración Avanzada</h3>
+                                <small class="info-text">Opciones adicionales para búsquedas especializadas</small>
+                            </div>
                             <div class="toggle-container">
                                 <input type="checkbox" id="showAdvanced" class="toggle-checkbox">
-                                <label for="showAdvanced" class="toggle-label">Mostrar opciones avanzadas</label>
+                                <label for="showAdvanced" class="toggle-switch"></label>
                             </div>
                         </div>
-                        <small class="info-text">Opciones adicionales para búsquedas especializadas</small>
                     </div>
                     <div id="advancedOptions" style="display: none;">
                         <div class="radio-group">
-                            <label class="radio-option">
-                                <input type="checkbox" id="prefixSearch" name="prefixEnabled">
-                                <div class="radio-content">
-                                    <div class="radio-title">Búsqueda por Prefijo</div>
-                                    <div class="radio-description">Encuentra términos que comienzan con el texto ingresado</div>
-                                    <div class="param-controls">
-                                        <span>Longitud mínima</span>
+                            <label class="checkbox-option">
+                                <div class="checkbox-content">
+                                    <div class="header-flex">
+                                        <div class="header-text">
+                                            <div class="checkbox-title">Longitud Mínima</div>
+                                            <div class="checkbox-description">Número mínimo de caracteres para activar la búsqueda por prefijo</div>
+                                        </div>
+                                        <div class="toggle-container">
+                                            <input type="checkbox" id="prefixSearch" name="prefixEnabled" class="toggle-checkbox">
+                                            <label for="prefixSearch" class="toggle-switch"></label>
+                                        </div>
+                                    </div>
+                                    <div id="prefixLengthOptions" class="input-number-container" style="display: none;">
                                         <input type="number" name="prefixMinLength" min="1" max="10" value="3">
                                         <span class="unit">caracteres</span>
                                     </div>
                                 </div>
                             </label>
 
-                            <label class="radio-option">
-                                <input type="checkbox" id="wildcardSearch" name="wildcardEnabled">
-                                <div class="radio-content">
-                                    <div class="radio-title">Búsqueda con Comodines</div>
-                                    <div class="radio-description">Usa caracteres comodín (* o ?) en la búsqueda</div>
-                                    <div class="param-controls">
-                                        <span>Máximo de comodines</span>
+                            <label class="checkbox-option">
+                                <div class="checkbox-content">
+                                    <div class="header-flex">
+                                        <div class="header-text">
+                                            <div class="checkbox-title">Búsqueda con Comodines</div>
+                                            <div class="checkbox-description">Usa caracteres comodín (* o ?) en la búsqueda</div>
+                                        </div>
+                                        <div class="toggle-container">
+                                            <input type="checkbox" id="wildcardSearch" name="wildcardEnabled" class="toggle-checkbox">
+                                            <label for="wildcardSearch" class="toggle-switch"></label>
+                                        </div>
+                                    </div>
+                                    <div id="wildcardOptions" class="input-number-container" style="display: none;">
                                         <input type="number" name="maxWildcards" min="1" max="5" value="2">
-                                        <span class="unit">por término</span>
+                                        <span class="unit">comodines</span>
                                     </div>
                                 </div>
                             </label>
 
-                            <label class="radio-option">
-                                <input type="checkbox" id="regexSearch" name="regexEnabled">
-                                <div class="radio-content">
-                                    <div class="radio-title">Búsqueda con Expresiones Regulares</div>
-                                    <div class="radio-description">Usa expresiones regulares para búsquedas avanzadas</div>
-                                    <div class="slider-control">
-                                        <span>Complejidad</span>
-                                        <input type="range" name="regexComplexity" min="0" max="100" value="50">
-                                        <span class="value-container">50%</span>
+                            <label class="checkbox-option">
+                                <div class="checkbox-content">
+                                    <div class="header-flex">
+                                        <div class="header-text">
+                                            <div class="checkbox-title">Búsqueda con Expresiones Regulares</div>
+                                            <div class="checkbox-description">Usa expresiones regulares para búsquedas avanzadas</div>
+                                        </div>
+                                        <div class="toggle-container">
+                                            <input type="checkbox" id="regexSearch" name="regexEnabled" class="toggle-checkbox">
+                                            <label for="regexSearch" class="toggle-switch"></label>
+                                        </div>
+                                    </div>
+                                    <div id="regexOptions" class="slider-control" style="display: none; width: 100%;">
+                                        <input type="range" name="regexComplexity" min="0" max="100" value="50" style="width: 100%;">
+                                        <div class="slider-text">
+                                            <div class="slider-label">Complejidad</div>
+                                            <span class="value-container">50%</span>
+                                        </div>
                                     </div>
                                 </div>
                             </label>
                         </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- API Keys Section -->
+            <div class="config-section" id="apikeysSection">
+                <div class="option-group">
+                    <div class="section-header">
+                        <h3>Gestión de API Keys</h3>
+                        <small class="info-text">Configura las claves de API para los diferentes servicios</small>
+                    </div>
+                    <div class="api-keys-container">
+                        <!-- OpenAI -->
+                        <div class="api-key-item">
+                            <div class="api-key-header">
+                                <div class="api-key-info">
+                                    <div class="api-key-title">OpenAI API Key</div>
+                                    <div class="api-key-description">Necesaria para GPT-4 y servicios de OpenAI</div>
+                                </div>
+                                <div class="api-key-status">
+                                    <span class="status-dot not-configured"></span>
+                                    <span class="status-text">No configurada</span>
+                                </div>
+                            </div>
+                            <div class="api-key-input-group">
+                                <input type="password" class="api-key-input" name="openaiApiKey" placeholder="sk-..." autocomplete="off">
+                                <button class="api-key-toggle">
+                                    <span class="material-icons">visibility_off</span>
+                                </button>
+                                <button class="api-key-test" data-provider="openai">
+                                    <span class="material-icons">check_circle</span>
+                                    Probar
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Anthropic -->
+                        <div class="api-key-item">
+                            <div class="api-key-header">
+                                <div class="api-key-info">
+                                    <div class="api-key-title">Anthropic API Key</div>
+                                    <div class="api-key-description">Necesaria para Claude y servicios de Anthropic</div>
+                                </div>
+                                <div class="api-key-status">
+                                    <span class="status-dot not-configured"></span>
+                                    <span class="status-text">No configurada</span>
+                                </div>
+                            </div>
+                            <div class="api-key-input-group">
+                                <input type="password" class="api-key-input" name="anthropicApiKey" placeholder="sk-ant-..." autocomplete="off">
+                                <button class="api-key-toggle">
+                                    <span class="material-icons">visibility_off</span>
+                                </button>
+                                <button class="api-key-test" data-provider="anthropic">
+                                    <span class="material-icons">check_circle</span>
+                                    Probar
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Google AI -->
+                        <div class="api-key-item">
+                            <div class="api-key-header">
+                                <div class="api-key-info">
+                                    <div class="api-key-title">Google AI API Key</div>
+                                    <div class="api-key-description">Necesaria para PaLM y servicios de Google AI</div>
+                                </div>
+                                <div class="api-key-status">
+                                    <span class="status-dot not-configured"></span>
+                                    <span class="status-text">No configurada</span>
+                                </div>
+                            </div>
+                            <div class="api-key-input-group">
+                                <input type="password" class="api-key-input" name="googleApiKey" placeholder="AIza..." autocomplete="off">
+                                <button class="api-key-toggle">
+                                    <span class="material-icons">visibility_off</span>
+                                </button>
+                                <button class="api-key-test" data-provider="google">
+                                    <span class="material-icons">check_circle</span>
+                                    Probar
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="option-group">
+                    <div class="section-header">
+                        <h3>Seguridad</h3>
+                        <small class="info-text">Opciones de seguridad para las API Keys</small>
+                    </div>
+                    <div class="radio-group">
+                        <label class="checkbox-option">
+                            <div class="checkbox-content">
+                                <div class="header-flex">
+                                    <div class="header-text">
+                                        <div class="checkbox-title">Encriptación Local</div>
+                                        <div class="checkbox-description">Encripta las API keys antes de almacenarlas localmente</div>
+                                    </div>
+                                    <div class="toggle-container">
+                                        <input type="checkbox" id="encryptKeys" name="encryptKeys" class="toggle-checkbox" checked>
+                                        <label for="encryptKeys" class="toggle-switch"></label>
+                                    </div>
+                                </div>
+                            </div>
+                        </label>
+
+                        <label class="checkbox-option">
+                            <div class="checkbox-content">
+                                <div class="header-flex">
+                                    <div class="header-text">
+                                        <div class="checkbox-title">Validación Automática</div>
+                                        <div class="checkbox-description">Valida las API keys automáticamente al guardarlas</div>
+                                    </div>
+                                    <div class="toggle-container">
+                                        <input type="checkbox" id="autoValidateKeys" name="autoValidateKeys" class="toggle-checkbox" checked>
+                                        <label for="autoValidateKeys" class="toggle-switch"></label>
+                                    </div>
+                                </div>
+                            </div>
+                        </label>
+                    </div>
+                </div>
+            </div>
+
+            <!-- AI Section -->
+            <div class="config-section" id="aiSection">
+                <div class="option-group">
+                    <div class="section-header">
+                        <h3>Motor de IA</h3>
+                        <small class="info-text">Configura los proveedores de IA y sus claves API</small>
+                    </div>
+                    <div class="radio-group">
+                        <label class="checkbox-option">
+                            <div class="checkbox-content">
+                                <div class="header-flex">
+                                    <div class="header-text">
+                                        <div class="checkbox-title">OpenAI</div>
+                                        <div class="checkbox-description">Utiliza GPT-4 para procesamiento avanzado</div>
+                                    </div>
+                                    <div class="toggle-container">
+                                        <input type="checkbox" id="openaiEnabled" name="openaiEnabled" class="toggle-checkbox">
+                                        <label for="openaiEnabled" class="toggle-switch"></label>
+                                    </div>
+                                </div>
+                                <div id="openaiOptions" class="api-key-input" style="display: none;">
+                                    <input type="password" name="openaiApiKey" placeholder="API Key de OpenAI" class="api-input">
+                                </div>
+                            </div>
+                        </label>
+
+                        <label class="checkbox-option">
+                            <div class="checkbox-content">
+                                <div class="header-flex">
+                                    <div class="header-text">
+                                        <div class="checkbox-title">Anthropic</div>
+                                        <div class="checkbox-description">Utiliza Claude para análisis médico especializado</div>
+                                    </div>
+                                    <div class="toggle-container">
+                                        <input type="checkbox" id="anthropicEnabled" name="anthropicEnabled" class="toggle-checkbox">
+                                        <label for="anthropicEnabled" class="toggle-switch"></label>
+                                    </div>
+                                </div>
+                                <div id="anthropicOptions" class="api-key-input" style="display: none;">
+                                    <input type="password" name="anthropicApiKey" placeholder="API Key de Anthropic" class="api-input">
+                                </div>
+                            </div>
+                        </label>
+
+                        <label class="checkbox-option">
+                            <div class="checkbox-content">
+                                <div class="header-flex">
+                                    <div class="header-text">
+                                        <div class="checkbox-title">Google AI</div>
+                                        <div class="checkbox-description">Utiliza PaLM para procesamiento multilingüe</div>
+                                    </div>
+                                    <div class="toggle-container">
+                                        <input type="checkbox" id="googleEnabled" name="googleEnabled" class="toggle-checkbox">
+                                        <label for="googleEnabled" class="toggle-switch"></label>
+                                    </div>
+                                </div>
+                                <div id="googleOptions" class="api-key-input" style="display: none;">
+                                    <input type="password" name="googleApiKey" placeholder="API Key de Google AI" class="api-input">
+                                </div>
+                            </div>
+                        </label>
                     </div>
                 </div>
             </div>
