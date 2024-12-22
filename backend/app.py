@@ -2,6 +2,8 @@ from flask import Flask, render_template, send_from_directory
 from flask_cors import CORS
 import os
 from routes.prompts import prompts_bp
+from api.ontology import ontology_bp
+from api.config import config_bp
 
 app = Flask(__name__, 
     template_folder='../frontend/templates',
@@ -11,6 +13,8 @@ CORS(app)
 
 # Registrar blueprints
 app.register_blueprint(prompts_bp)
+app.register_blueprint(ontology_bp)
+app.register_blueprint(config_bp)
 
 @app.route('/')
 def index():

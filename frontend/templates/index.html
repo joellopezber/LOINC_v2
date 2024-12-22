@@ -4,53 +4,63 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>LOINC Search</title>
-    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
     <link rel="stylesheet" href="/static/css/styles.css">
-    <link rel="stylesheet" href="/static/css/components/search.css">
-    <link rel="stylesheet" href="/static/css/components/config-modal.css">
-    <link rel="stylesheet" href="/static/css/components/notifications.css">
 </head>
 <body>
     <header>
-        <button class="config-button" type="button" aria-label="Configuración">
+        <h1>LOINC Search</h1>
+        <button id="configBtn" class="config-button" aria-label="Configuración">
             <span class="material-icons">settings</span>
         </button>
     </header>
 
     <main>
-        <div class="logo">
-            <h1 class="logo-text">
-                <span>L</span><span>o</span><span>o</span><span>,</span><span>i</span><span>n</span><span>c</span>
-            </h1>
-        </div>
-        <div class="search-container">
-            <div class="search-box">
-                <div class="search-icon">
-                    <span class="material-icons">search</span>
-                </div>
-                <input type="text" class="search-input" placeholder="Buscar término médico..." autocomplete="off" maxlength="2048">
-                <div class="upload-button">
-                    <span class="material-icons">upload_file</span>
-                </div>
-            </div>
-            <div class="search-buttons">
-                <button class="search-button">Buscar con LOOINC</button>
-            </div>
-        </div>
+        <search-box></search-box>
+        <div id="results" class="results-container"></div>
     </main>
 
-    <footer>
-        <p>LOINC Search Tool - v2.0</p>
-    </footer>
-
-    <!-- Modal Container -->
-    <div id="modalContainer">
-        <!-- Include Config Modal -->
-        {% include 'components/config-modal.html' %}
-    </div>
+    <config-modal></config-modal>
 
     <!-- Scripts -->
-    <script src="/static/js/utils/storage.js" type="module"></script>
-    <script type="module" src="/static/js/app.js"></script>
+    <script type="module" src="/static/js/components/search-box.js"></script>
+    <script type="module" src="/static/js/components/config-modal.js"></script>
+    <script type="module">
+        import { searchService } from '/static/js/services/search.service.js';
+        
+        // Configurar modal
+        const configBtn = document.getElementById('configBtn');
+        const configModal = document.querySelector('config-modal');
+        
+        configBtn.addEventListener('click', () => {
+            configModal.show();
+        });
+
+        // Manejar resultados de búsqueda
+        document.addEventListener('search-results', (e) => {
+            const results = e.detail;
+            const resultsContainer = document.getElementById('results');
+            
+            // Limpiar resultados anteriores
+            resultsContainer.innerHTML = '';
+            
+            if (results.length === 0) {
+                resultsContainer.innerHTML = '<p class="no-results">No se encontraron resultados</p>';
+                return;
+            }
+            
+            // Mostrar nuevos resultados
+            results.forEach(result => {
+                const resultElement = document.createElement('div');
+                resultElement.className = 'result-item';
+                resultElement.innerHTML = `
+                    <h3>${result.term}</h3>
+                    <p><strong>Código LOINC:</strong> ${result.code}</p>
+                    <p><strong>Tipo:</strong> ${result.type}</p>
+                    <p>${result.description}</p>
+                `;
+                resultsContainer.appendChild(resultElement);
+            });
+        });
+    </script>
 </body>
 </html> 
