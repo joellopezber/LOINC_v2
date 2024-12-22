@@ -5,22 +5,24 @@ class WebSocketService {
     constructor() {
         this.socket = null;
         this.connected = false;
-        this.queue = [];
         this.retryCount = 0;
         this.maxRetries = 3;
-        this.storageSchema = {
-            version: "1.0",
-            keys: {}
-        };
     }
 
     /**
      * Inicia la conexión WebSocket
      */
     connect() {
-        this.socket = io('http://localhost:3000');
+        const options = {
+            transports: ['websocket'],
+            upgrade: false,
+            reconnection: true,
+            reconnectionAttempts: this.maxRetries,
+            reconnectionDelay: 1000
+        };
+        
+        this.socket = io('http://localhost:5001', options);
         this.setupListeners();
-        this.registerSchema();
     }
 
     /**
@@ -30,114 +32,67 @@ class WebSocketService {
         this.socket.on('connect', () => {
             console.log('WebSocket conectado');
             this.connected = true;
-            this.processQueue();
+            this.retryCount = 0;
         });
 
         this.socket.on('disconnect', () => {
             console.log('WebSocket desconectado');
             this.connected = false;
+            this.reconnect();
         });
 
-        this.socket.on('storage.synced', (data) => {
-            console.log('Sincronizado:', data.key);
-        });
-
-        this.socket.on('storage.error', (data) => {
-            console.error('Error:', data.error);
-        });
-
-        this.socket.on('storage.schema_registered', (data) => {
-            console.log('Schema registrado:', data.message);
-        });
-        
-        // Nuevo listener para solicitudes del backend
-        this.socket.on('storage.request_value', async (data) => {
+        // Listener para obtener valor del localStorage
+        this.socket.on('storage.get_value', async (data) => {
             try {
                 const { request_id, key } = data;
-                
-                // Obtener valor del localStorage
                 const value = localStorage.getItem(key);
                 
-                // Enviar respuesta al backend
-                this.socket.emit('storage.value_response', {
+                this.socket.emit('storage.value', {
                     request_id,
                     key,
-                    value,
-                    status: 'success'
+                    value: value ? JSON.parse(value) : null
                 });
             } catch (error) {
-                console.error('Error procesando solicitud:', error);
-                this.socket.emit('storage.value_response', {
-                    request_id: data.request_id,
-                    key: data.key,
-                    error: error.message,
-                    status: 'error'
-                });
+                console.error('Error al obtener valor:', error);
             }
         });
-    }
 
-    /**
-     * Registra el schema del localStorage en el backend
-     */
-    registerSchema() {
-        // Ejemplo de schema
-        this.storageSchema.keys = {
-            openaiApiKey: {
-                type: "string",
-                encrypted: true,
-                required: true
-            },
-            anthropicApiKey: {
-                type: "string",
-                encrypted: true,
-                required: true
-            },
-            googleApiKey: {
-                type: "string",
-                encrypted: true,
-                required: true
-            },
-            theme: {
-                type: "object",
-                encrypted: false,
-                required: false
-            },
-            preferences: {
-                type: "object",
-                encrypted: false,
-                required: false
+        // Listener para establecer valor en localStorage
+        this.socket.on('storage.set_value', (data) => {
+            try {
+                const { key, value } = data;
+                localStorage.setItem(key, JSON.stringify(value));
+            } catch (error) {
+                console.error('Error al establecer valor:', error);
             }
-        };
+        });
 
-        if (this.connected) {
-            this.socket.emit('storage.register_schema', this.storageSchema);
-        } else {
-            this.queue.push(['storage.register_schema', this.storageSchema]);
-        }
-    }
-
-    /**
-     * Sincroniza un valor con el backend
-     */
-    syncValue(key, value, encrypted = false) {
-        const data = { key, value, encrypted };
-        if (this.connected) {
-            this.socket.emit('storage.sync', data);
-        } else {
-            this.queue.push(['storage.sync', data]);
-            this.reconnect();
-        }
-    }
-
-    /**
-     * Procesa la cola de mensajes pendientes
-     */
-    processQueue() {
-        while (this.queue.length > 0) {
-            const [event, data] = this.queue.shift();
-            this.socket.emit(event, data);
-        }
+        // Listener para obtener tablas disponibles
+        this.socket.on('storage.get_tables', () => {
+            try {
+                const tables = [];
+                for (let i = 0; i < localStorage.length; i++) {
+                    const key = localStorage.key(i);
+                    try {
+                        const value = JSON.parse(localStorage.getItem(key));
+                        if (typeof value === 'object') {
+                            tables.push({
+                                name: key,
+                                size: new Blob([JSON.stringify(value)]).size,
+                                entries: Object.keys(value).length
+                            });
+                        }
+                    } catch (e) {
+                        // No es una tabla JSON válida
+                        continue;
+                    }
+                }
+                
+                this.socket.emit('storage.tables', { tables });
+            } catch (error) {
+                console.error('Error al obtener tablas:', error);
+            }
+        });
     }
 
     /**

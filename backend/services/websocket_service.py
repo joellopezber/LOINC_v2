@@ -1,24 +1,22 @@
 from flask_socketio import SocketIO, emit
 from typing import Dict, Any
-from .storage_service import storage_service
+import json
 
 class WebSocketService:
-    """
-    Servicio para sincronizar localStorage entre frontend y backend
-    """
     def __init__(self, app):
         self.app = app
-        self.socketio = SocketIO(app, cors_allowed_origins="*")
+        self.socketio = SocketIO(
+            app,
+            cors_allowed_origins="*",
+            async_mode='threading',
+            logger=True,
+            engineio_logger=True,
+            transports=['websocket']
+        )
+        self.pending_requests = {}
         self._setup_handlers()
-        storage_service.set_websocket(self)
-        
-    def emit(self, event: str, data: Dict[str, Any]):
-        """Envía un evento al cliente"""
-        self.socketio.emit(event, data)
         
     def _setup_handlers(self):
-        """Configurar los manejadores de eventos WebSocket"""
-        
         @self.socketio.on('connect')
         def handle_connect():
             print("Cliente conectado")
@@ -27,89 +25,61 @@ class WebSocketService:
         def handle_disconnect():
             print("Cliente desconectado")
             
-        @self.socketio.on('storage.register_schema')
-        def handle_register_schema(schema: Dict[str, Any]):
-            """
-            Registra el schema del localStorage desde el frontend
-            
-            Args:
-                schema (dict): Estructura del localStorage
-            """
-            try:
-                storage_service.update_schema(schema)
-                emit('storage.schema_registered', {
-                    'status': 'success',
-                    'message': 'Schema registrado correctamente'
-                })
-            except Exception as e:
-                emit('storage.error', {
-                    'error': f"Error registrando schema: {str(e)}"
-                })
-                
-        @self.socketio.on('storage.value_response')
-        def handle_value_response(data: Dict[str, Any]):
-            """
-            Maneja la respuesta del frontend a una solicitud de valor
-            
-            Args:
-                data (dict): Datos de la respuesta con:
-                    - request_id: str
-                    - key: str
-                    - value: Any
-                    - status: str
-                    - error: str (opcional)
-            """
+        @self.socketio.on('storage.value')
+        def handle_storage_value(data: Dict[str, Any]):
+            """Maneja la respuesta del frontend con un valor del localStorage"""
             request_id = data.get('request_id')
-            if not request_id:
-                return
+            if request_id in self.pending_requests:
+                callback = self.pending_requests.pop(request_id)
+                callback(data.get('value'))
                 
-            if data.get('status') == 'success':
-                storage_service.handle_frontend_response(
-                    request_id,
-                    data.get('value')
-                )
-            else:
-                print(f"Error obteniendo valor: {data.get('error')}")
+        @self.socketio.on('storage.tables')
+        def handle_storage_tables(data: Dict[str, Any]):
+            """Recibe la lista de tablas disponibles en localStorage"""
+            print(f"Tablas disponibles: {data.get('tables', [])}")
+            emit('storage.tables_received', {
+                'status': 'success',
+                'message': 'Tablas recibidas correctamente'
+            })
             
-        @self.socketio.on('storage.sync')
-        def handle_storage_sync(data: Dict[str, Any]):
-            """
-            Recibe y almacena datos del localStorage
+    async def get_storage_value(self, key: str) -> Any:
+        """
+        Solicita un valor del localStorage
+        """
+        request_id = f"req_{len(self.pending_requests)}"
+        
+        # Crear una Promise para esperar la respuesta
+        future = self.app.async_loop.create_future()
+        self.pending_requests[request_id] = future.set_result
+        
+        # Solicitar el valor al frontend
+        self.socketio.emit('storage.get_value', {
+            'request_id': request_id,
+            'key': key
+        })
+        
+        # Esperar respuesta
+        try:
+            value = await future
+            return value
+        except Exception as e:
+            print(f"Error obteniendo valor: {e}")
+            return None
             
-            Args:
-                data (dict): Datos a sincronizar con:
-                    - key: str
-                    - value: Any
-                    - encrypted: bool
-            """
-            try:
-                key = data.get('key')
-                value = data.get('value')
-                encrypted = data.get('encrypted', False)
-                
-                if not key or value is None:
-                    raise ValueError("Key y value son requeridos")
-                
-                print(f"Recibido del localStorage - Key: {key}")
-                
-                # Almacenar en el storage service
-                storage_service.set_value(key, value, encrypted)
-                
-                # Confirmar al cliente
-                emit('storage.synced', {
-                    'key': key,
-                    'status': 'success'
-                })
-                
-            except Exception as e:
-                print(f"Error sincronizando localStorage: {str(e)}")
-                emit('storage.error', {
-                    'key': key if key else 'unknown',
-                    'error': str(e)
-                })
-    
-    def run(self, host='127.0.0.1', port=3000):
+    def set_storage_value(self, key: str, value: Any):
         """
-        Inicia el servidor WebSocket usando IPv4
+        Establece un valor en el localStorage
         """
-        self.socketio.run(self.app, host=host, port=port, debug=True) 
+        self.socketio.emit('storage.set_value', {
+            'key': key,
+            'value': value
+        })
+        
+    def request_tables(self):
+        """
+        Solicita la lista de tablas disponibles en localStorage
+        """
+        self.socketio.emit('storage.get_tables')
+        
+    def run(self, host: str = '0.0.0.0', port: int = 5001):
+        self.socketio.run(self.app, host=host, port=port) 
