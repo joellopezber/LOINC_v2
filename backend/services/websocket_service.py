@@ -1,6 +1,8 @@
 from flask_socketio import SocketIO, emit
 from typing import Dict, Any
 import json
+import eventlet
+eventlet.monkey_patch()
 
 class WebSocketService:
     def __init__(self, app):
@@ -8,7 +10,7 @@ class WebSocketService:
         self.socketio = SocketIO(
             app,
             cors_allowed_origins="*",
-            async_mode='threading',
+            async_mode='eventlet',
             logger=True,
             engineio_logger=True,
             transports=['websocket']
@@ -20,37 +22,53 @@ class WebSocketService:
         @self.socketio.on('connect')
         def handle_connect():
             print("Cliente conectado")
+            emit('connect_response', {'status': 'success'})
             
         @self.socketio.on('disconnect')
         def handle_disconnect():
             print("Cliente desconectado")
             
-        @self.socketio.on('storage.value')
-        def handle_storage_value(data: Dict[str, Any]):
-            """Maneja la respuesta del frontend con un valor del localStorage"""
-            request_id = data.get('request_id')
-            if request_id in self.pending_requests:
-                callback = self.pending_requests.pop(request_id)
-                callback(data.get('value'))
+        @self.socketio.on('storage.get_value')
+        def handle_get_value(data: Dict[str, Any]):
+            """Maneja la solicitud de valor del localStorage"""
+            key = data.get('key')
+            if key:
+                # Aquí simularemos obtener el valor del storage
+                # En una implementación real, esto vendría del frontend
+                mock_data = {
+                    'searchConfig': {
+                        'search': {
+                            'ontologyMode': 'multi_match',
+                            'dbMode': 'elastic'
+                        },
+                        'elastic': {
+                            'limits': {
+                                'maxTotal': 100,
+                                'maxPerKeyword': 10
+                            }
+                        }
+                    }
+                }
+                emit('storage.value', {'value': mock_data.get(key)})
+            else:
+                emit('storage.value', {'error': 'Key not provided'})
                 
-        @self.socketio.on('storage.tables')
-        def handle_storage_tables(data: Dict[str, Any]):
-            """Recibe la lista de tablas disponibles en localStorage"""
-            print(f"Tablas disponibles: {data.get('tables', [])}")
+        @self.socketio.on('storage.get_tables')
+        def handle_get_tables():
+            """Maneja la solicitud de tablas disponibles"""
+            # Aquí simularemos las tablas disponibles
+            # En una implementación real, esto vendría del frontend
+            mock_tables = ['searchConfig', 'apiKeys', 'history']
             emit('storage.tables_received', {
                 'status': 'success',
-                'message': 'Tablas recibidas correctamente'
+                'tables': mock_tables
             })
             
-    async def get_storage_value(self, key: str) -> Any:
+    def get_storage_value(self, key: str) -> Any:
         """
         Solicita un valor del localStorage
         """
         request_id = f"req_{len(self.pending_requests)}"
-        
-        # Crear una Promise para esperar la respuesta
-        future = self.app.async_loop.create_future()
-        self.pending_requests[request_id] = future.set_result
         
         # Solicitar el valor al frontend
         self.socketio.emit('storage.get_value', {
@@ -58,10 +76,15 @@ class WebSocketService:
             'key': key
         })
         
-        # Esperar respuesta
+        # Esperar respuesta usando eventlet
         try:
-            value = await future
-            return value
+            with eventlet.Timeout(5.0):
+                while request_id in self.pending_requests:
+                    eventlet.sleep(0.1)
+                return self.pending_requests.get(request_id)
+        except eventlet.Timeout:
+            print(f"Timeout esperando valor para {key}")
+            return None
         except Exception as e:
             print(f"Error obteniendo valor: {e}")
             return None

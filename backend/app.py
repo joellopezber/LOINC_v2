@@ -1,7 +1,9 @@
+import eventlet
+eventlet.monkey_patch()
+
 from flask import Flask, render_template
 from flask_cors import CORS
 from services.websocket_service import WebSocketService
-import asyncio
 import logging
 
 # Configurar logging
@@ -12,10 +14,6 @@ app = Flask(__name__,
     static_folder='../frontend/static'
 )
 CORS(app, resources={r"/*": {"origins": "*"}})
-
-# Configurar loop async para WebSocket
-app.async_loop = asyncio.new_event_loop()
-asyncio.set_event_loop(app.async_loop)
 
 # Inicializar WebSocket
 websocket = WebSocketService(app)
