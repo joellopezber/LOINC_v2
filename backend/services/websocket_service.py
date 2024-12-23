@@ -28,7 +28,30 @@ class WebSocketService:
             'openaiApiKey': None,
             'installTimestamp': None
         }
+        # Almacenar último valor para comparar cambios
+        self.last_values = {}
         self._setup_handlers()
+            
+    def _has_value_changed(self, key: str, new_value: Any) -> bool:
+        """Comprueba si el valor ha cambiado respecto al último almacenado"""
+        if key not in self.last_values:
+            return True
+        return self.last_values[key] != new_value
+
+    def _log_value_update(self, key: str, value: Any, request_id: str):
+        """Log formateado para actualizaciones de valores"""
+        if self._has_value_changed(key, value):
+            # Si el valor ha cambiado, mostrar JSON completo y formateado
+            formatted_json = json.dumps({
+                'key': key,
+                'value': value,
+                'request_id': request_id
+            }, indent=2)
+            logger.info(f"📥 Nuevo valor recibido:\n{formatted_json}")
+            self.last_values[key] = value
+        else:
+            # Si no ha cambiado, mostrar versión simplificada
+            logger.debug(f"📤 Solicitud set_value: key='{key}'")
             
     def _setup_handlers(self):
         @self.socketio.on('connect')
@@ -74,7 +97,6 @@ class WebSocketService:
         @self.socketio.on('storage.set_value')
         def handle_set_value(data: Dict[str, Any]):
             """Maneja la solicitud de establecer un valor en localStorage"""
-            logger.info(f"📤 Recibida solicitud set_value: {data}")
             key = data.get('key')
             value = data.get('value')
             request_id = data.get('request_id')
@@ -91,6 +113,9 @@ class WebSocketService:
                 return
             
             if key and value is not None:
+                # Log del valor recibido
+                self._log_value_update(key, value, request_id)
+                
                 # Actualizar cache local
                 self.storage_data[key] = value
                 logger.info(f"💾 Almacenado: {key}")
