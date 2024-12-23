@@ -3,6 +3,7 @@ from typing import Dict, Any
 import json
 import eventlet
 import logging
+from .encryption_service import encryption_service
 
 # Configurar logging
 logging.basicConfig(level=logging.DEBUG)
@@ -29,12 +30,23 @@ class WebSocketService:
         @self.socketio.on('connect')
         def handle_connect():
             logger.info("Cliente conectado")
+            # Enviar master key al conectar
+            master_key = encryption_service.get_master_key()
+            emit('encryption.master_key', {'key': master_key})
             emit('connect_response', {'status': 'success'})
             
         @self.socketio.on('disconnect')
         def handle_disconnect():
             logger.info("Cliente desconectado")
             
+        @self.socketio.on('encryption.get_master_key')
+        def handle_get_master_key():
+            """Maneja la solicitud de obtener la master key"""
+            logger.info("Cliente solicitando master key")
+            master_key = encryption_service.get_master_key()
+            emit('encryption.master_key', {'key': master_key})
+            logger.info("Master key enviada al cliente")
+
         @self.socketio.on('storage.get_value')
         def handle_get_value(data: Dict[str, Any]):
             """Maneja la solicitud de valor del localStorage"""
