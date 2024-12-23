@@ -1,14 +1,27 @@
-* {
-    margin: 0;
-    padding: 0;
-    box-sizing: border-box;
+html {
+    height: 100%;
+    visibility: visible;
+    opacity: 1;
+}
+
+html.styles-loading {
+    visibility: hidden;
+    opacity: 0;
+}
+
+html.styles-loaded {
+    visibility: visible;
+    opacity: 1;
+    transition: opacity 0.3s ease-out;
 }
 
 body {
-    height: 100vh;
+    height: 100%;
+    margin: 0;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     display: flex;
     flex-direction: column;
+    background-color: white;
 }
 
 header {
