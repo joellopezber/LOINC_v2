@@ -17,7 +17,6 @@ class SearchComponent {
     initializeEvents() {
         console.log('Inicializando eventos de búsqueda');
         
-        // Solo manejar el click del botón de búsqueda
         this.searchButton.addEventListener('click', (e) => {
             e.preventDefault();
             e.stopPropagation();
@@ -25,13 +24,20 @@ class SearchComponent {
             this.performSearch();
         });
 
-        // Manejar la tecla Enter en el input
         this.searchInput.addEventListener('keypress', (e) => {
             if (e.key === 'Enter') {
                 e.preventDefault();
                 this.performSearch();
             }
         });
+
+        // Escuchar resultados de búsqueda
+        if (window.socket) {
+            window.socket.on('search.results', (data) => {
+                console.log('Resultados de búsqueda recibidos:', data);
+                this.handleSearchResults(data);
+            });
+        }
     }
 
     async performSearch() {
@@ -42,31 +48,26 @@ class SearchComponent {
         }
 
         console.log('Realizando búsqueda:', searchTerm);
-        const config = window.storage.getConfig();
         
         try {
-            const response = await fetch('/api/search', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    term: searchTerm,
-                    config: config.search
-                })
+            // Obtener configuración actual usando storageService
+            const searchConfig = await window.storageService.getSearchConfig();
+            
+            // Enviar búsqueda por WebSocket
+            window.socket.emit('search.perform', {
+                term: searchTerm,
+                config: searchConfig,
+                request_id: `search_${Date.now()}`
             });
-
-            if (!response.ok) {
-                throw new Error('Error en la búsqueda');
-            }
-
-            const results = await response.json();
-            console.log('Resultados:', results);
-            // Aquí iría la lógica para mostrar los resultados
+            
         } catch (error) {
             console.error('Error realizando la búsqueda:', error);
-            // Aquí iría la lógica para mostrar el error
         }
+    }
+
+    handleSearchResults(data) {
+        console.log('Procesando resultados:', data);
+        // Implementar lógica de mostrar resultados
     }
 }
 

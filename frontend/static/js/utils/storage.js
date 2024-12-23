@@ -1,48 +1,5 @@
 import { encryption } from './encryption.js';
-
-// Configuración por defecto
-const defaultConfig = {
-    search: {
-        ontologyMode: 'multi_match',
-        dbMode: 'sql',
-        openai: {
-            useOriginalTerm: true,
-            useEnglishTerm: false,
-            useRelatedTerms: false,
-            useTestTypes: false,
-            useLoincCodes: false,
-            useKeywords: false
-        }
-    },
-    sql: {
-        maxTotal: 150,
-        maxPerKeyword: 100,
-        maxKeywords: 10,
-        strictMode: true,
-        sqlMaxTotal: 150
-    },
-    elastic: {
-        limits: {
-            maxTotal: 50,
-            maxPerKeyword: 10
-        },
-        searchTypes: {
-            exact: {
-                enabled: true,
-                priority: 10
-            },
-            fuzzy: {
-                enabled: true,
-                tolerance: 2
-            },
-            smart: {
-                enabled: true,
-                precision: 7
-            }
-        },
-        showAdvanced: false
-    }
-};
+import { DEFAULT_CONFIG } from '../config/default-config.js';
 
 // Esquema de validación
 const configSchema = {
@@ -59,61 +16,111 @@ const configSchema = {
         }
     },
     sql: {
-        maxTotal: { type: 'number', min: 1, max: 1000 },
-        maxPerKeyword: { type: 'number', min: 1, max: 100 },
-        maxKeywords: { type: 'number', min: 1, max: 50 },
-        strictMode: 'boolean',
-        sqlMaxTotal: { type: 'number', min: 1, max: 1000, optional: true }
+        maxTotal: 'number',
+        maxPerKeyword: 'number',
+        maxKeywords: 'number',
+        strictMode: 'boolean'
     },
     elastic: {
         limits: {
-            maxTotal: { type: 'number', min: 1, max: 1000 },
-            maxPerKeyword: { type: 'number', min: 1, max: 100 }
+            maxTotal: 'number',
+            maxPerKeyword: 'number'
         },
         searchTypes: {
             exact: {
                 enabled: 'boolean',
-                priority: { type: 'number', min: 1, max: 100 }
+                priority: 'number'
             },
             fuzzy: {
                 enabled: 'boolean',
-                tolerance: { type: 'number', min: 1, max: 10 }
+                tolerance: 'number'
             },
             smart: {
                 enabled: 'boolean',
-                precision: { type: 'number', min: 1, max: 10 }
+                precision: 'number'
             }
         },
         showAdvanced: 'boolean'
+    },
+    performance: {
+        maxCacheSize: 'number',
+        cacheExpiry: 'number'
     }
 };
 
 class StorageService {
     constructor() {
-        console.info('[Storage] Inicializando servicio');
+        console.debug('[Storage] Creando instancia...');
+        this.config = null;
+        this.initialized = false;
+        this.initPromise = null;
+        this.logger = console;
+        
+        // Asegurar que installTimestamp existe
         if (!localStorage.getItem('installTimestamp')) {
             localStorage.setItem('installTimestamp', Date.now().toString());
         }
-        this.initialize();
     }
 
+    /**
+     * Inicializa el almacenamiento
+     */
     async initialize() {
+        // Si ya hay una inicialización en curso, retornar la promesa existente
+        if (this.initPromise) {
+            console.debug('[Storage] Inicialización en curso...');
+            return this.initPromise;
+        }
+
+        // Si ya está inicializado, retornar inmediatamente
+        if (this.initialized) {
+            console.debug('[Storage] Ya inicializado');
+            return true;
+        }
+
+        this.initPromise = (async () => {
+            try {
+                console.debug('[Storage] Iniciando...');
+                
+                // Cargar configuración inicial
+                await this._loadConfig();
+                
+                this.initialized = true;
+                console.debug('[Storage] ✅ Inicializado');
+                return true;
+            } catch (error) {
+                console.error('[Storage] Error en inicialización:', error);
+                return false;
+            } finally {
+                this.initPromise = null;
+            }
+        })();
+
+        return this.initPromise;
+    }
+
+    async _loadConfig() {
         try {
             const existingConfig = localStorage.getItem('searchConfig');
             
             if (!existingConfig) {
-                console.info('[Storage] Primera inicialización, usando valores por defecto');
-                await this.setConfig(defaultConfig);
-            } else {
-                const parsedConfig = JSON.parse(existingConfig);
-                if (!this.validateConfig(parsedConfig)) {
-                    console.warn('[Storage] Configuración inválida, restaurando valores por defecto');
-                    await this.setConfig(defaultConfig);
-                }
+                console.debug('[Storage] Primera inicialización, usando valores por defecto');
+                await this.setConfig(DEFAULT_CONFIG);
+                return DEFAULT_CONFIG;
             }
+
+            const parsedConfig = JSON.parse(existingConfig);
+            if (!this.validateConfig(parsedConfig)) {
+                console.warn('[Storage] Configuración inválida, restaurando valores por defecto');
+                await this.setConfig(DEFAULT_CONFIG);
+                return DEFAULT_CONFIG;
+            }
+
+            return parsedConfig;
         } catch (error) {
-            console.error('[Storage] Error en inicialización:', error);
-            return defaultConfig;
+            console.error('[Storage] Error cargando configuración:', error);
+            await this.setConfig(DEFAULT_CONFIG);
+            return DEFAULT_CONFIG;
         }
     }
 
@@ -213,25 +220,41 @@ class StorageService {
     }
 
     async getConfig() {
+        // Asegurar que el servicio está inicializado
+        if (!this.initialized) {
+            await this.initialize();
+        }
+
         try {
             const config = localStorage.getItem('searchConfig');
-            console.log('Obteniendo configuración:', config);
-            return config ? JSON.parse(config) : defaultConfig;
+            console.debug('Obteniendo configuración:', config);
+            return config ? JSON.parse(config) : DEFAULT_CONFIG;
         } catch (error) {
             console.error('Error al leer la configuración:', error);
-            return defaultConfig;
+            return DEFAULT_CONFIG;
         }
     }
 
+    /**
+     * Guarda la configuración en localStorage
+     */
     async setConfig(config) {
         try {
+            // Validar configuración
             if (!this.validateConfig(config)) {
                 throw new Error('Configuración inválida');
             }
+
+            // Guardar en localStorage
             localStorage.setItem('searchConfig', JSON.stringify(config));
-            document.dispatchEvent(new CustomEvent('config:updated', { detail: config }));
+            console.debug('Configuración guardada:', config);
+
+            // Emitir evento para que storage.service.js lo capture
+            window.dispatchEvent(new CustomEvent('storage:config_updated', { detail: config }));
+
+            return true;
         } catch (error) {
-            console.error('[Storage] Error al guardar configuración:', error);
+            console.error('Error al guardar configuración:', error);
             throw error;
         }
     }
@@ -242,14 +265,14 @@ class StorageService {
             
             await this.createBackup();
             
-            if (!this.validateConfig(defaultConfig)) {
+            if (!this.validateConfig(DEFAULT_CONFIG)) {
                 console.error('[Storage] defaultConfig no es válido según el schema');
                 throw new Error('defaultConfig no es válido');
             }
             
-            localStorage.setItem('searchConfig', JSON.stringify(defaultConfig));
+            localStorage.setItem('searchConfig', JSON.stringify(DEFAULT_CONFIG));
             document.dispatchEvent(new CustomEvent('config:updated', { 
-                detail: { config: defaultConfig }
+                detail: { config: DEFAULT_CONFIG }
             }));
             
             return true;

@@ -389,16 +389,23 @@
                                     <span class="status-text">No configurada</span>
                                 </div>
                             </div>
-                            <div class="api-key-input-group">
-                                <input type="password" class="api-key-input" name="openaiApiKey" placeholder="sk-..." autocomplete="off">
-                                <button class="api-key-toggle">
+                            <form id="api-key-form-openai" class="api-key-input-group" onsubmit="return false;">
+                                <div style="display: none;">
+                                    <label for="openai-username">Usuario OpenAI</label>
+                                    <input type="text" id="openai-username" name="username" value="openai" autocomplete="username">
+                                </div>
+                                <div class="api-key-input-wrapper">
+                                    <label for="openai-key" class="visually-hidden">API Key OpenAI</label>
+                                    <input type="password" id="openai-key" class="api-key-input" name="openaiApiKey" placeholder="sk-..." autocomplete="current-password">
+                                </div>
+                                <button type="button" class="api-key-toggle" aria-label="Mostrar/ocultar API key">
                                     <span class="material-icons">visibility_off</span>
                                 </button>
-                                <button class="api-key-test" data-provider="openai">
+                                <button type="button" class="api-key-test" data-provider="openai" aria-label="Probar API key">
                                     <span class="material-icons">check_circle</span>
                                     Probar
                                 </button>
-                            </div>
+                            </form>
                         </div>
 
                         <!-- Anthropic -->
@@ -413,16 +420,23 @@
                                     <span class="status-text">No configurada</span>
                                 </div>
                             </div>
-                            <div class="api-key-input-group">
-                                <input type="password" class="api-key-input" name="anthropicApiKey" placeholder="sk-ant-..." autocomplete="off">
-                                <button class="api-key-toggle">
+                            <form id="api-key-form-anthropic" class="api-key-input-group" onsubmit="return false;">
+                                <div style="display: none;">
+                                    <label for="anthropic-username">Usuario Anthropic</label>
+                                    <input type="text" id="anthropic-username" name="username" value="anthropic" autocomplete="username">
+                                </div>
+                                <div class="api-key-input-wrapper">
+                                    <label for="anthropic-key" class="visually-hidden">API Key Anthropic</label>
+                                    <input type="password" id="anthropic-key" class="api-key-input" name="anthropicApiKey" placeholder="sk-ant-..." autocomplete="current-password">
+                                </div>
+                                <button type="button" class="api-key-toggle" aria-label="Mostrar/ocultar API key">
                                     <span class="material-icons">visibility_off</span>
                                 </button>
-                                <button class="api-key-test" data-provider="anthropic">
+                                <button type="button" class="api-key-test" data-provider="anthropic" aria-label="Probar API key">
                                     <span class="material-icons">check_circle</span>
                                     Probar
                                 </button>
-                            </div>
+                            </form>
                         </div>
 
                         <!-- Google AI -->
@@ -437,16 +451,23 @@
                                     <span class="status-text">No configurada</span>
                                 </div>
                             </div>
-                            <div class="api-key-input-group">
-                                <input type="password" class="api-key-input" name="googleApiKey" placeholder="AIza..." autocomplete="off">
-                                <button class="api-key-toggle">
+                            <form id="api-key-form-google" class="api-key-input-group" onsubmit="return false;">
+                                <div style="display: none;">
+                                    <label for="google-username">Usuario Google AI</label>
+                                    <input type="text" id="google-username" name="username" value="google" autocomplete="username">
+                                </div>
+                                <div class="api-key-input-wrapper">
+                                    <label for="google-key" class="visually-hidden">API Key Google AI</label>
+                                    <input type="password" id="google-key" class="api-key-input" name="googleApiKey" placeholder="AIza..." autocomplete="current-password">
+                                </div>
+                                <button type="button" class="api-key-toggle" aria-label="Mostrar/ocultar API key">
                                     <span class="material-icons">visibility_off</span>
                                 </button>
-                                <button class="api-key-test" data-provider="google">
+                                <button type="button" class="api-key-test" data-provider="google" aria-label="Probar API key">
                                     <span class="material-icons">check_circle</span>
                                     Probar
                                 </button>
-                            </div>
+                            </form>
                         </div>
                     </div>
                 </div>

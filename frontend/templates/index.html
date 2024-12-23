@@ -9,6 +9,16 @@
     <link rel="stylesheet" href="/static/css/components/search.css">
     <link rel="stylesheet" href="/static/css/components/config-modal.css">
     <link rel="stylesheet" href="/static/css/components/notifications.css">
+    
+    <!-- Socket.IO -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.min.js"></script>
+    
+    <!-- Services -->
+    <script type="module" src="/static/js/services/storage.service.js"></script>
+    <script type="module" src="/static/js/services/websocket.service.js"></script>
+    
+    <!-- App Scripts -->
+    <script type="module" src="/static/js/app.js"></script>
 </head>
 <body>
     <header>
@@ -49,8 +59,22 @@
         {% include 'components/config-modal.html' %}
     </div>
 
-    <!-- Scripts -->
-    <script src="/static/js/utils/storage.js" type="module"></script>
-    <script type="module" src="/static/js/app.js"></script>
+    <!-- Tests -->
+    <script type="module" src="/static/js/test/storage.test.js"></script>
+
+    <script>
+        // Inicializar servicios cuando la página cargue
+        document.addEventListener('DOMContentLoaded', async () => {
+            // Inicializar storage service
+            if (window.storageService) {
+                await window.storageService.initialize();
+            }
+            
+            // Conectar WebSocket
+            if (window.webSocketService) {
+                window.webSocketService.connect();
+            }
+        });
+    </script>
 </body>
 </html> 
