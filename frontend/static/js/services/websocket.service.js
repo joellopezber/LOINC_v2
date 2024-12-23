@@ -42,15 +42,16 @@ class WebSocketService {
                         reconnectionAttempts: 10,
                         reconnectionDelay: 500,
                         timeout: 10000,
-                        // Prevenir conexiones duplicadas
-                        multiplex: false,
-                        // Configuración adicional
-                        forceNew: true,
-                        autoConnect: true
+                        // Permitir reutilización de conexiones
+                        multiplex: true,
+                        // No forzar nueva conexión
+                        forceNew: false,
+                        autoConnect: false
                     });
 
                     window.socket = this.socket;
                     this.setupEventHandlers();
+                    this.socket.connect();
                 }
 
                 // Timeout para la conexión
@@ -124,7 +125,7 @@ class WebSocketService {
         this.socket.on('disconnect', (reason) => {
             console.log(`🔌 Desconectado del servidor (${reason})`);
             this.connected = false;
-            // Notificar desconexión
+            // Notificar desconexi��n
             window.dispatchEvent(new CustomEvent('websocket:disconnected'));
         });
     }

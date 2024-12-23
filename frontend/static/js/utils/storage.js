@@ -90,29 +90,76 @@ const configSchema = {
 
 class StorageService {
     constructor() {
-        console.info('[Storage] Inicializando servicio');
+        console.debug('[Storage] Creando instancia...');
+        this.config = null;
+        this.initialized = false;
+        this.initPromise = null;
+        this.logger = console;
+        
+        // Asegurar que installTimestamp existe
         if (!localStorage.getItem('installTimestamp')) {
             localStorage.setItem('installTimestamp', Date.now().toString());
         }
-        this.initialize();
     }
 
+    /**
+     * Inicializa el almacenamiento
+     */
     async initialize() {
+        // Si ya hay una inicialización en curso, retornar la promesa existente
+        if (this.initPromise) {
+            console.debug('[Storage] Inicialización en curso...');
+            return this.initPromise;
+        }
+
+        // Si ya está inicializado, retornar inmediatamente
+        if (this.initialized) {
+            console.debug('[Storage] Ya inicializado');
+            return true;
+        }
+
+        this.initPromise = (async () => {
+            try {
+                console.debug('[Storage] Iniciando...');
+                
+                // Cargar configuración inicial
+                await this._loadConfig();
+                
+                this.initialized = true;
+                console.debug('[Storage] ✅ Inicializado');
+                return true;
+            } catch (error) {
+                console.error('[Storage] Error en inicialización:', error);
+                return false;
+            } finally {
+                this.initPromise = null;
+            }
+        })();
+
+        return this.initPromise;
+    }
+
+    async _loadConfig() {
         try {
             const existingConfig = localStorage.getItem('searchConfig');
             
             if (!existingConfig) {
-                console.info('[Storage] Primera inicialización, usando valores por defecto');
+                console.debug('[Storage] Primera inicialización, usando valores por defecto');
                 await this.setConfig(defaultConfig);
-            } else {
-                const parsedConfig = JSON.parse(existingConfig);
-                if (!this.validateConfig(parsedConfig)) {
-                    console.warn('[Storage] Configuración inválida, restaurando valores por defecto');
-                    await this.setConfig(defaultConfig);
-                }
+                return defaultConfig;
             }
+
+            const parsedConfig = JSON.parse(existingConfig);
+            if (!this.validateConfig(parsedConfig)) {
+                console.warn('[Storage] Configuración inválida, restaurando valores por defecto');
+                await this.setConfig(defaultConfig);
+                return defaultConfig;
+            }
+
+            return parsedConfig;
         } catch (error) {
-            console.error('[Storage] Error en inicialización:', error);
+            console.error('[Storage] Error cargando configuración:', error);
+            await this.setConfig(defaultConfig);
             return defaultConfig;
         }
     }
@@ -213,9 +260,14 @@ class StorageService {
     }
 
     async getConfig() {
+        // Asegurar que el servicio está inicializado
+        if (!this.initialized) {
+            await this.initialize();
+        }
+
         try {
             const config = localStorage.getItem('searchConfig');
-            console.log('Obteniendo configuración:', config);
+            console.debug('Obteniendo configuración:', config);
             return config ? JSON.parse(config) : defaultConfig;
         } catch (error) {
             console.error('Error al leer la configuración:', error);
@@ -235,11 +287,10 @@ class StorageService {
 
             // Guardar en localStorage
             localStorage.setItem('searchConfig', JSON.stringify(config));
-            console.log('Configuración guardada:', config);
+            console.debug('Configuración guardada:', config);
 
             // Emitir evento para que storage.service.js lo capture
-            const event = new CustomEvent('storage:config_updated', { detail: config });
-            window.dispatchEvent(event);
+            window.dispatchEvent(new CustomEvent('storage:config_updated', { detail: config }));
 
             return true;
         } catch (error) {

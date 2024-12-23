@@ -6,7 +6,7 @@ import { storage } from '../utils/storage.js';
 class StorageService {
     constructor() {
         this.logger = this._createLogger();
-        this.logger.info('Servicio inicializado');
+        this.logger.debug('Creando instancia...');
         this.initialized = false;
         this.initializing = false;
         this.lastSyncTime = 0;
@@ -17,9 +17,16 @@ class StorageService {
         this.configCacheTimeout = 1000; // 1 segundo
         this.updateTimeout = null;
         this.initPromise = null;
+        this.ignoreNextUpdate = false;
+        this.wsConfigured = false;
 
         // Escuchar eventos de storage.js con debounce
         window.addEventListener('storage:config_updated', async () => {
+            if (this.ignoreNextUpdate) {
+                this.ignoreNextUpdate = false;
+                return;
+            }
+
             this.logger.debug('Configuración actualizada en storage.js');
             
             // Cancelar timeout anterior si existe
@@ -40,19 +47,23 @@ class StorageService {
     async initialize() {
         // Si ya hay una inicialización en curso, retornar la promesa existente
         if (this.initPromise) {
+            this.logger.debug('Inicialización en curso...');
             return this.initPromise;
         }
 
         // Si ya está inicializado, retornar inmediatamente
         if (this.initialized) {
-            this.logger.debug('Ya inicializado');
+            this.logger.debug('Servicio ya inicializado');
             return true;
         }
 
         this.initPromise = (async () => {
             try {
                 this.initializing = true;
-                this.logger.info('Iniciando...');
+                this.logger.debug('Iniciando servicio...');
+                
+                // Inicializar storage.js primero
+                await storage.initialize();
                 
                 // Obtener configuración inicial
                 const config = await storage.getConfig();
@@ -61,8 +72,11 @@ class StorageService {
                 // Esperar a que el WebSocket esté disponible
                 await this._waitForWebSocket();
 
-                // Configurar WebSocket
-                this._setupWebSocket();
+                // Configurar WebSocket solo si no está ya configurado
+                if (!this.wsConfigured) {
+                    this._setupWebSocket();
+                    this.wsConfigured = true;
+                }
 
                 // Sincronizar con el backend
                 if (window.socket?.connected) {
@@ -70,7 +84,7 @@ class StorageService {
                 }
 
                 this.initialized = true;
-                this.logger.info('✅ Inicializado');
+                this.logger.debug('✅ Servicio inicializado');
                 return true;
             } catch (error) {
                 this.logger.error('Error en inicialización', error);
@@ -88,13 +102,13 @@ class StorageService {
      * Espera a que el WebSocket esté disponible
      */
     async _waitForWebSocket() {
-        if (window.socket) {
+        if (window.socket?.connected) {
             return;
         }
 
         return new Promise((resolve) => {
             const checkInterval = setInterval(() => {
-                if (window.socket) {
+                if (window.socket?.connected) {
                     clearInterval(checkInterval);
                     resolve();
                 }
@@ -195,6 +209,7 @@ class StorageService {
             }
 
             try {
+                this.ignoreNextUpdate = true;
                 switch(key) {
                     case 'searchConfig':
                         await storage.setConfig(value);
@@ -216,15 +231,38 @@ class StorageService {
 
         // Escuchar reconexión
         window.socket.on('connect', async () => {
+            // Evitar sincronización si ya hay una en curso
+            if (this.pendingSync) {
+                this.logger.debug('⏳ Reconexión ignorada - sincronización en curso');
+                return;
+            }
+            
             this.logger.info('🔄 Reconectado - sincronizando...');
-            await this._syncWithServer();
+            await this.queueSync({ force: true });
+        });
+
+        // Escuchar desconexión
+        window.socket.on('disconnect', () => {
+            this.logger.warn('🔌 Desconectado del servidor');
         });
     }
 
     /**
      * Añade una sincronización a la cola
      */
-    async queueSync() {
+    async queueSync(options = { force: false }) {
+        // Si ya hay una sincronización pendiente en la cola y no es forzada, usar esa
+        if (this.syncQueue.length > 0 && !options.force) {
+            return new Promise((resolve) => {
+                this.syncQueue.push(resolve);
+            });
+        }
+
+        // Si es forzada, limpiar cola anterior
+        if (options.force) {
+            this.syncQueue = [];
+        }
+
         return new Promise((resolve) => {
             this.syncQueue.push(resolve);
             this.processQueue();
@@ -240,21 +278,28 @@ class StorageService {
         }
 
         this.pendingSync = true;
+        let success = false;
 
         try {
-            const success = await this._syncWithServer();
+            success = await this._syncWithServer();
             
             // Notificar a todos los que están esperando
-            while (this.syncQueue.length > 0) {
-                const resolve = this.syncQueue.shift();
-                resolve(success);
-            }
+            const resolvers = [...this.syncQueue];
+            this.syncQueue = [];
+            
+            resolvers.forEach(resolve => resolve(success));
+        } catch (error) {
+            this.logger.error('Error procesando cola:', error);
+            // Notificar error a todos los que están esperando
+            const resolvers = [...this.syncQueue];
+            this.syncQueue = [];
+            resolvers.forEach(resolve => resolve(false));
         } finally {
             this.pendingSync = false;
             
-            // Si hay más en la cola, procesar
+            // Si hay nuevas solicitudes, esperar un poco antes de procesar
             if (this.syncQueue.length > 0) {
-                this.processQueue();
+                setTimeout(() => this.processQueue(), 100);
             }
         }
     }
@@ -266,9 +311,12 @@ class StorageService {
         try {
             // Evitar sincronizaciones muy frecuentes (mínimo 1 segundo entre cada una)
             const now = Date.now();
-            if (now - this.lastSyncTime < 1000) {
-                this.logger.debug('⏳ Sincronización pospuesta - muy reciente');
-                await new Promise(resolve => setTimeout(resolve, 1000));
+            const timeSinceLastSync = now - this.lastSyncTime;
+            
+            if (timeSinceLastSync < 1000) {
+                const waitTime = 1000 - timeSinceLastSync;
+                this.logger.debug(`⏳ Sincronización pospuesta - esperando ${waitTime}ms`);
+                await new Promise(resolve => setTimeout(resolve, waitTime));
             }
 
             // Solo sincronizar si hay conexión WebSocket
@@ -277,42 +325,56 @@ class StorageService {
                 return false;
             }
 
-            this.lastSyncTime = now;
-            const syncId = `sync_${now}`;
-            
             // Obtener valores actuales
             const [config, apiKey, timestamp] = await Promise.all([
-                storage.getConfig(),
+                this.getSearchConfig(), // Usar getSearchConfig para aprovechar el caché
                 localStorage.getItem('openaiApiKey'),
                 localStorage.getItem('installTimestamp')
             ]);
 
-            this.logger.debug('📤 Sincronizando configuración:', config);
+            if (!config && !apiKey && !timestamp) {
+                this.logger.debug('⏭️ Nada que sincronizar');
+                return true;
+            }
+
+            this.lastSyncTime = Date.now();
+            const syncId = `sync_${this.lastSyncTime}`;
+            
+            this.logger.debug('📤 Sincronizando valores...');
 
             // Enviar valores en paralelo
             const promises = [];
             
             if (config) {
-                promises.push(window.socket.emit('storage.set_value', {
-                    key: 'searchConfig',
-                    value: config,
-                    request_id: `${syncId}_config`
+                promises.push(new Promise((resolve) => {
+                    window.socket.emit('storage.set_value', {
+                        key: 'searchConfig',
+                        value: config,
+                        request_id: `${syncId}_config`
+                    });
+                    resolve();
                 }));
             }
 
             if (apiKey) {
-                promises.push(window.socket.emit('storage.set_value', {
-                    key: 'openaiApiKey',
-                    value: apiKey,
-                    request_id: `${syncId}_apikey`
+                promises.push(new Promise((resolve) => {
+                    window.socket.emit('storage.set_value', {
+                        key: 'openaiApiKey',
+                        value: apiKey,
+                        request_id: `${syncId}_apikey`
+                    });
+                    resolve();
                 }));
             }
 
             if (timestamp) {
-                promises.push(window.socket.emit('storage.set_value', {
-                    key: 'installTimestamp',
-                    value: timestamp,
-                    request_id: `${syncId}_timestamp`
+                promises.push(new Promise((resolve) => {
+                    window.socket.emit('storage.set_value', {
+                        key: 'installTimestamp',
+                        value: timestamp,
+                        request_id: `${syncId}_timestamp`
+                    });
+                    resolve();
                 }));
             }
 
@@ -334,12 +396,10 @@ class StorageService {
             // Usar caché si está disponible y no ha expirado
             const now = Date.now();
             if (this.configCache && now - this.configCacheTime < this.configCacheTimeout) {
-                this.logger.debug('Usando configuración cacheada');
                 return this.configCache;
             }
 
             const config = await storage.getConfig();
-            this.logger.debug('Obteniendo configuración:', config);
             
             // Actualizar caché
             this.configCache = config;
@@ -358,11 +418,14 @@ class StorageService {
     async saveSearchConfig(config) {
         try {
             this.logger.info('Guardando nueva configuración...');
+            
+            // Ignorar el próximo evento de storage.js
+            this.ignoreNextUpdate = true;
             await storage.setConfig(config);
             
             // Notificar al servidor del cambio
             if (window.socket?.connected) {
-                await this._syncWithServer();
+                await this.queueSync();
             } else {
                 this.logger.warn('WebSocket no conectado - cambios solo guardados localmente');
             }
