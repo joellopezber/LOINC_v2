@@ -18,26 +18,29 @@ class WebSocketService:
             app,
             cors_allowed_origins="*",
             async_mode='eventlet',
-            logger=True,
-            engineio_logger=True,
+            logger=False,
+            engineio_logger=False,
             transports=['websocket']
         )
         # Almacenamiento en memoria de la configuración
-        self.storage_data = {}
+        self.storage_data = {
+            'searchConfig': {},
+            'openaiApiKey': None,
+            'installTimestamp': None
+        }
         self._setup_handlers()
             
     def _setup_handlers(self):
         @self.socketio.on('connect')
         def handle_connect():
-            logger.info("Cliente conectado")
-            # Enviar master key al conectar
+            logger.info("🔌 Cliente conectado")
             master_key = encryption_service.get_master_key()
             emit('encryption.master_key', {'key': master_key})
             emit('connect_response', {'status': 'success'})
             
         @self.socketio.on('disconnect')
         def handle_disconnect():
-            logger.info("Cliente desconectado")
+            logger.info("🔌 Cliente desconectado")
             
         @self.socketio.on('encryption.get_master_key')
         def handle_get_master_key():
@@ -50,19 +53,19 @@ class WebSocketService:
         @self.socketio.on('storage.get_value')
         def handle_get_value(data: Dict[str, Any]):
             """Maneja la solicitud de valor del localStorage"""
-            logger.info(f"Recibida solicitud get_value: {data}")
+            logger.info(f"📤 Enviando valor de: {data}")
             key = data.get('key')
             request_id = data.get('request_id')
             
             if key:
                 value = self.storage_data.get(key)
+                logger.info(f"📤 Enviando valor de: {key}")
                 emit('storage_value', {
                     'value': value,
                     'request_id': request_id
                 })
-                logger.info(f"Valor enviado: {json.dumps(value, indent=2)}")
             else:
-                logger.error("Error: Key no proporcionada")
+                logger.error("❌ Key no proporcionada")
                 emit('storage_value', {
                     'error': 'Key not provided',
                     'request_id': request_id
@@ -71,15 +74,26 @@ class WebSocketService:
         @self.socketio.on('storage.set_value')
         def handle_set_value(data: Dict[str, Any]):
             """Maneja la solicitud de establecer un valor en localStorage"""
-            logger.info(f"Recibida solicitud set_value: {data}")
+            logger.info(f"📤 Recibida solicitud set_value: {data}")
             key = data.get('key')
             value = data.get('value')
             request_id = data.get('request_id')
             
+            # Validar que la key sea permitida
+            allowed_keys = ['searchConfig', 'openaiApiKey', 'installTimestamp']
+            if key not in allowed_keys:
+                logger.error(f"❌ Key no permitida: {key}")
+                emit('storage.value_set', {
+                    'status': 'error',
+                    'message': f'Key {key} no permitida',
+                    'request_id': request_id
+                })
+                return
+            
             if key and value is not None:
                 # Actualizar cache local
                 self.storage_data[key] = value
-                logger.info(f"Configuración actualizada: {json.dumps(value, indent=2)}")
+                logger.info(f"💾 Almacenado: {key}")
                 
                 # Confirmar al cliente original
                 emit('storage.value_set', {
@@ -87,14 +101,34 @@ class WebSocketService:
                     'key': key,
                     'request_id': request_id
                 })
-                logger.info(f"Valor establecido: {key}")
+                
+                # Broadcast a todos los clientes excepto al emisor
+                emit('storage.value_updated', {
+                    'key': key,
+                    'value': value
+                }, broadcast=True, include_self=False)
+                
+                logger.debug(f"📡 Broadcast enviado: {key}")
             else:
-                logger.error("Error: Key y value son requeridos")
+                logger.error("❌ Key y value son requeridos")
                 emit('storage.value_set', {
                     'status': 'error',
                     'message': 'Key and value are required',
                     'request_id': request_id
                 })
+
+        @self.socketio.on('storage.get_all')
+        def handle_get_all(data: Dict[str, Any]):
+            """Maneja la solicitud de obtener todos los valores"""
+            logger.info("📤 Enviando todos los valores")
+            request_id = data.get('request_id')
+            
+            # Enviar todos los valores almacenados
+            emit('storage.all_values', {
+                'values': self.storage_data,
+                'request_id': request_id
+            })
+            logger.info("Todos los valores enviados")
 
         @self.socketio.on('search.perform')
         def handle_search(data: Dict[str, Any]):
@@ -140,6 +174,6 @@ class WebSocketService:
                     'error': str(e),
                     'request_id': request_id
                 })
-            
+
     def run(self, host: str = '0.0.0.0', port: int = 5001):
         self.socketio.run(self.app, host=host, port=port) 

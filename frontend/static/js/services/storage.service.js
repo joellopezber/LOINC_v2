@@ -166,9 +166,19 @@ class StorageService {
             this.logger.debug('Actualización del servidor', data);
             const { key, value } = data;
             try {
-                if (key === 'searchConfig') {
-                    await storage.setConfig(value);
-                    this.logger.debug('Config actualizada desde servidor');
+                switch(key) {
+                    case 'searchConfig':
+                        await storage.setConfig(value);
+                        this.logger.debug('Config actualizada desde servidor');
+                        break;
+                    case 'openaiApiKey':
+                        localStorage.setItem('openaiApiKey', value);
+                        this.logger.debug('API key actualizada desde servidor');
+                        break;
+                    case 'installTimestamp':
+                        localStorage.setItem('installTimestamp', value);
+                        this.logger.debug('Timestamp actualizado desde servidor');
+                        break;
                 }
             } catch (error) {
                 this.logger.error('Error actualizando valor', error);
@@ -195,13 +205,35 @@ class StorageService {
             }
             this.lastSyncTime = now;
 
+            // Sincronizar searchConfig
             const config = await storage.getConfig();
             window.socket.emit('storage.set_value', {
                 key: 'searchConfig',
                 value: config,
-                request_id: `sync_${now}`
+                request_id: `sync_${now}_config`
             });
-            this.logger.debug('Configuración sincronizada con servidor');
+
+            // Sincronizar openaiApiKey
+            const apiKey = localStorage.getItem('openaiApiKey');
+            if (apiKey) {
+                window.socket.emit('storage.set_value', {
+                    key: 'openaiApiKey',
+                    value: apiKey,
+                    request_id: `sync_${now}_apikey`
+                });
+            }
+
+            // Sincronizar installTimestamp
+            const timestamp = localStorage.getItem('installTimestamp');
+            if (timestamp) {
+                window.socket.emit('storage.set_value', {
+                    key: 'installTimestamp',
+                    value: timestamp,
+                    request_id: `sync_${now}_timestamp`
+                });
+            }
+
+            this.logger.debug('Todos los valores sincronizados con servidor');
             return true;
         } catch (error) {
             this.logger.error('Error al sincronizar con servidor:', error);

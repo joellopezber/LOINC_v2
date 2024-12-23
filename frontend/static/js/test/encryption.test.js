@@ -1,6 +1,34 @@
 import { encryption } from '../utils/encryption.js';
+import { io } from 'https://cdn.socket.io/4.7.2/socket.io.esm.min.js';
 
 let testRunning = false;
+let socket;
+
+/**
+ * Inicializa la conexión WebSocket
+ */
+async function initializeSocket() {
+    return new Promise((resolve, reject) => {
+        console.log('🔌 Conectando al WebSocket...');
+        socket = io({
+            transports: ['websocket']
+        });
+
+        socket.on('connect', () => {
+            console.log('✅ Conectado al WebSocket');
+            resolve(socket);
+        });
+
+        socket.on('connect_error', (error) => {
+            console.error('❌ Error de conexión:', error);
+            reject(error);
+        });
+
+        socket.on('encryption.master_key', (data) => {
+            console.log('✅ Master key recibida');
+        });
+    });
+}
 
 /**
  * Test para EncryptionService - Verifica la migración y sincronización de master key
@@ -13,6 +41,11 @@ async function testEncryptionService() {
     testRunning = true;
 
     try {
+        // 0. Asegurar conexión al WebSocket
+        if (!socket?.connected) {
+            socket = await initializeSocket();
+        }
+
         console.log('\n🧪 Iniciando diagnóstico de EncryptionService...');
         
         // 1. Estado inicial
@@ -71,15 +104,27 @@ async function testEncryptionService() {
     }
 }
 
-// Ejecutar cuando el documento esté listo y el WebSocket conectado
-if (window.socket?.connected) {
-    testEncryptionService().catch(error => {
-        console.error('❌ Error en diagnóstico:', error);
-    });
-} else {
-    window.socket.on('connect', () => {
+// Ejecutar cuando el documento esté listo
+document.addEventListener('DOMContentLoaded', () => {
+    const runButton = document.createElement('button');
+    runButton.textContent = 'Ejecutar Test Encriptación';
+    runButton.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        padding: 10px 20px;
+        background: #4CAF50;
+        color: white;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+    `;
+    
+    runButton.addEventListener('click', () => {
         testEncryptionService().catch(error => {
-            console.error('❌ Error en diagnóstico:', error);
+            console.error('❌ Error en prueba:', error);
         });
     });
-} 
+    
+    document.body.appendChild(runButton);
+}); 
