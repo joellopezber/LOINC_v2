@@ -4,7 +4,6 @@ class EncryptionService {
         this.initialized = false;
         this.masterKeyPromise = null;
         this.initializationAttempted = false;
-        this._migrateFromLocalStorage(); // Migración suave desde localStorage
     }
 
     // Función auxiliar para convertir ArrayBuffer a Base64 de forma segura
@@ -31,16 +30,6 @@ class EncryptionService {
         }
         
         return bytes.buffer;
-    }
-
-    async _migrateFromLocalStorage() {
-        // Migración suave: si existe una masterkey en localStorage, la usaremos una última vez
-        const oldKey = localStorage.getItem('masterKey');
-        if (oldKey) {
-            console.debug('[Encryption] Encontrada master key antigua, se migrará en el próximo inicio');
-            this._temporaryKey = oldKey;
-            // No borramos inmediatamente para mantener compatibilidad durante la migración
-        }
     }
 
     async initialize() {
@@ -89,14 +78,7 @@ class EncryptionService {
                         });
                     }
 
-                    // Si no se pudo obtener del backend, intentar usar la key temporal de migración
-                    if (!masterKey && this._temporaryKey) {
-                        console.log('[Encryption] Usando master key temporal durante migración');
-                        masterKey = this._temporaryKey;
-                        delete this._temporaryKey; // Usar solo una vez
-                    }
-
-                    // Si no hay key disponible, error
+                    // Si no se pudo obtener la master key del backend, error
                     if (!masterKey) {
                         throw new Error('No se pudo obtener la master key del servidor');
                     }
@@ -112,13 +94,6 @@ class EncryptionService {
                     
                     this.initialized = true;
                     console.log('[Encryption] Servicio inicializado correctamente');
-
-                    // Si la inicialización fue exitosa y usamos la key temporal, limpiar localStorage
-                    if (localStorage.getItem('masterKey')) {
-                        console.debug('[Encryption] Limpiando master key antigua del localStorage');
-                        localStorage.removeItem('masterKey');
-                    }
-
                     resolve();
                 } catch (error) {
                     console.error('[Encryption] Error crítico inicializando el servicio:', error);

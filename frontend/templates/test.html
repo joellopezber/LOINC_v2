@@ -4,33 +4,54 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Test de Encriptación</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
     <style>
         body {
-            font-family: monospace;
-            padding: 20px;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 20px;
             background: #f5f5f5;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            border-bottom: 2px solid #eee;
+            padding-bottom: 10px;
         }
         #console {
             background: #1e1e1e;
             color: #d4d4d4;
-            padding: 20px;
-            border-radius: 8px;
+            padding: 15px;
+            border-radius: 4px;
+            font-family: 'Consolas', 'Monaco', monospace;
             white-space: pre-wrap;
-            font-size: 14px;
-            line-height: 1.5;
-            max-height: 80vh;
+            margin-top: 20px;
+            max-height: 500px;
             overflow-y: auto;
         }
         .success { color: #4caf50; }
         .error { color: #f44336; }
-        .info { color: #2196f3; }
         .warning { color: #ff9800; }
+        .info { color: #2196f3; }
     </style>
 </head>
 <body>
-    <h1>Test de Encriptación</h1>
-    <div id="console"></div>
+    <div class="container">
+        <h1>Test de Encriptación</h1>
+        <div id="console"></div>
+    </div>
+
+    <!-- Socket.IO -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    
+    <!-- Servicios -->
+    <script type="module" src="/static/js/services/websocket.service.js"></script>
+    <script type="module" src="/static/js/test/encryption.test.js"></script>
 
     <script>
         // Redirigir console.log al div
@@ -39,53 +60,56 @@
             log: console.log,
             error: console.error,
             warn: console.warn,
-            info: console.info
+            debug: console.debug
         };
 
-        function appendToConsole(text, className = '') {
-            const line = document.createElement('div');
-            line.textContent = text;
-            if (className) line.className = className;
-            consoleDiv.appendChild(line);
-            consoleDiv.scrollTop = consoleDiv.scrollHeight;
+        function formatTime() {
+            return new Date().toLocaleTimeString();
         }
 
-        console.log = (...args) => {
-            originalConsole.log(...args);
-            appendToConsole(args.join(' '), 'info');
+        console.log = function() {
+            const args = Array.from(arguments);
+            const message = args.map(arg => 
+                typeof arg === 'object' ? JSON.stringify(arg, null, 2) : arg
+            ).join(' ');
+            
+            consoleDiv.innerHTML += `<div>[${formatTime()}] ${message}</div>`;
+            consoleDiv.scrollTop = consoleDiv.scrollHeight;
+            originalConsole.log.apply(console, arguments);
         };
 
-        console.error = (...args) => {
-            originalConsole.error(...args);
-            appendToConsole(args.join(' '), 'error');
+        console.error = function() {
+            const args = Array.from(arguments);
+            const message = args.map(arg => 
+                typeof arg === 'object' ? JSON.stringify(arg, null, 2) : arg
+            ).join(' ');
+            
+            consoleDiv.innerHTML += `<div class="error">[${formatTime()}] ❌ ${message}</div>`;
+            consoleDiv.scrollTop = consoleDiv.scrollHeight;
+            originalConsole.error.apply(console, arguments);
         };
 
-        console.warn = (...args) => {
-            originalConsole.warn(...args);
-            appendToConsole(args.join(' '), 'warning');
+        console.warn = function() {
+            const args = Array.from(arguments);
+            const message = args.map(arg => 
+                typeof arg === 'object' ? JSON.stringify(arg, null, 2) : arg
+            ).join(' ');
+            
+            consoleDiv.innerHTML += `<div class="warning">[${formatTime()}] ⚠️ ${message}</div>`;
+            consoleDiv.scrollTop = consoleDiv.scrollHeight;
+            originalConsole.warn.apply(console, arguments);
         };
 
-        console.info = (...args) => {
-            originalConsole.info(...args);
-            appendToConsole(args.join(' '), 'success');
+        console.debug = function() {
+            const args = Array.from(arguments);
+            const message = args.map(arg => 
+                typeof arg === 'object' ? JSON.stringify(arg, null, 2) : arg
+            ).join(' ');
+            
+            consoleDiv.innerHTML += `<div class="info">[${formatTime()}] 🔍 ${message}</div>`;
+            consoleDiv.scrollTop = consoleDiv.scrollHeight;
+            originalConsole.debug.apply(console, arguments);
         };
-
-        // Inicializar WebSocket
-        window.socket = io('http://localhost:5001', {
-            transports: ['websocket']
-        });
-
-        window.socket.on('connect', () => {
-            console.log('🔌 Conectado al servidor WebSocket');
-            // Cargar módulos de prueba después de la conexión
-            import('/static/js/test/encryption.test.js').catch(err => {
-                console.error('Error cargando módulo de prueba:', err);
-            });
-        });
-
-        window.socket.on('connect_error', (error) => {
-            console.error('❌ Error de conexión WebSocket:', error.message);
-        });
     </script>
 </body>
-</html> 
+</html>

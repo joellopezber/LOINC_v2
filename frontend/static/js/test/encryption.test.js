@@ -3,7 +3,7 @@ import { encryption } from '../utils/encryption.js';
 let testRunning = false;
 
 /**
- * Test para EncryptionService - Verifica la sincronización de master key
+ * Test para EncryptionService - Verifica la migración y sincronización de master key
  */
 async function testEncryptionService() {
     if (testRunning) {
@@ -16,9 +16,9 @@ async function testEncryptionService() {
         console.log('\n🧪 Iniciando diagnóstico de EncryptionService...');
         
         // 1. Estado inicial
-        console.log('\n1️⃣ Estado del localStorage:');
+        console.log('\n1️⃣ Estado inicial:');
         const initialMasterKey = localStorage.getItem('masterKey');
-        console.log('Master key inicial:', initialMasterKey ? '(presente)' : '(no presente)');
+        console.log('Master key en localStorage:', initialMasterKey ? '(presente)' : '(no presente)');
         
         // 2. Inicializar servicio
         console.log('\n2️⃣ Inicializando servicio de encriptación:');
@@ -30,14 +30,15 @@ async function testEncryptionService() {
             return;
         }
         
-        // 3. Verificar sincronización
-        console.log('\n3️⃣ Verificando sincronización con backend:');
+        // 3. Verificar migración
+        console.log('\n3️⃣ Verificando migración:');
         const finalMasterKey = localStorage.getItem('masterKey');
-        console.log('Master key final:', finalMasterKey ? '(presente)' : '(no presente)');
+        console.log('Master key en localStorage después de inicialización:', finalMasterKey ? '(presente)' : '(eliminada)');
         
         // 4. Probar encriptación/desencriptación
-        console.log('\n4️⃣ Probando encriptación:');
+        console.log('\n4️⃣ Probando funcionalidad:');
         try {
+            // Probar con datos nuevos
             const testData = 'Test de encriptación ' + Date.now();
             console.log('Datos de prueba:', testData);
             
@@ -51,6 +52,14 @@ async function testEncryptionService() {
                 console.log('✅ Encriptación/desencriptación exitosa');
             } else {
                 console.error('❌ Error en encriptación/desencriptación');
+            }
+
+            // Probar con datos previamente encriptados (si existen)
+            const oldApiKey = localStorage.getItem('openaiApiKey');
+            if (oldApiKey) {
+                console.log('\n5️⃣ Verificando compatibilidad con datos antiguos:');
+                const decryptedOld = await encryption.decrypt(oldApiKey);
+                console.log('Desencriptación de API key antigua:', decryptedOld ? '(éxito)' : '(error)');
             }
         } catch (error) {
             console.error('❌ Error en prueba de encriptación:', error);
