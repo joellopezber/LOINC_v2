@@ -53,6 +53,26 @@ class WebSocketService:
             else:
                 emit('storage.value', {'error': 'Key not provided'})
                 
+        @self.socketio.on('storage.set_value')
+        def handle_set_value(data: Dict[str, Any]):
+            """Maneja la solicitud de establecer un valor en localStorage"""
+            key = data.get('key')
+            value = data.get('value')
+            
+            if key and value is not None:
+                # Aquí simularemos guardar el valor
+                # En una implementación real, esto se sincronizaría con el frontend
+                print(f"Guardando valor para {key}: {json.dumps(value, indent=2)}")
+                emit('storage.value_set', {
+                    'status': 'success',
+                    'key': key
+                })
+            else:
+                emit('storage.value_set', {
+                    'status': 'error',
+                    'message': 'Key and value are required'
+                })
+                
         @self.socketio.on('storage.get_tables')
         def handle_get_tables():
             """Maneja la solicitud de tablas disponibles"""

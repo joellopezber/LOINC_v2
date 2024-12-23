@@ -26,6 +26,70 @@ export class ConfigModal {
         document.addEventListener('modal:close', () => this.close());
     }
 
+    async saveConfig() {
+        console.log('[ConfigModal] Guardando configuración...');
+        const newConfig = {
+            search: {
+                ontologyMode: document.querySelector('input[name="searchMode"]:checked').value,
+                dbMode: document.querySelector('input[name="dbMode"]:checked').value,
+                openai: {
+                    useOriginalTerm: document.querySelector('input[name="useOriginalTerm"]').checked,
+                    useEnglishTerm: document.querySelector('input[name="useEnglishTerm"]').checked,
+                    useRelatedTerms: document.querySelector('input[name="useRelatedTerms"]').checked,
+                    useTestTypes: document.querySelector('input[name="useTestTypes"]').checked,
+                    useLoincCodes: document.querySelector('input[name="useLoincCodes"]').checked,
+                    useKeywords: document.querySelector('input[name="useKeywords"]').checked
+                }
+            },
+            sql: {
+                maxTotal: parseInt(document.querySelector('input[name="sqlMaxTotal"]').value),
+                maxPerKeyword: parseInt(document.querySelector('input[name="maxPerKeyword"]').value),
+                maxKeywords: parseInt(document.querySelector('input[name="maxKeywords"]').value),
+                strictMode: document.querySelector('input[name="sqlMode"][value="strict"]').checked
+            },
+            elastic: {
+                limits: {
+                    maxTotal: parseInt(document.querySelector('#elasticSection input[name="maxTotal"]').value),
+                    maxPerKeyword: parseInt(document.querySelector('#elasticSection input[name="maxPerKeyword"]').value)
+                },
+                searchTypes: {
+                    exact: {
+                        enabled: document.querySelector('input[name="exactEnabled"]').checked,
+                        priority: parseInt(document.querySelector('input[name="exactPriority"]').value)
+                    },
+                    fuzzy: {
+                        enabled: document.querySelector('input[name="fuzzyEnabled"]').checked,
+                        tolerance: parseInt(document.querySelector('input[name="fuzzyTolerance"]').value)
+                    },
+                    smart: {
+                        enabled: document.querySelector('input[name="smartEnabled"]').checked,
+                        precision: parseInt(document.querySelector('input[name="smartPrecision"]').value)
+                    }
+                },
+                showAdvanced: document.getElementById('showAdvanced').checked
+            },
+            performance: {
+                maxCacheSize: parseInt(document.querySelector('input[name="maxCacheSize"]').value),
+                cacheExpiry: parseInt(document.querySelector('input[name="cacheExpiry"]').value)
+            }
+        };
+
+        try {
+            // Guardar en localStorage
+            const currentConfig = await storage.getConfig();
+            const hasChanges = JSON.stringify(currentConfig) !== JSON.stringify(newConfig);
+            
+            if (hasChanges) {
+                await storage.setConfig(newConfig);
+                notifications.success('Configuración guardada correctamente');
+                this.hasUnsavedChanges = false;
+            }
+        } catch (error) {
+            console.error('[ConfigModal] Error al guardar:', error);
+            notifications.error('Error al guardar la configuración');
+        }
+    }
+
     open() {
         console.log('[ConfigModal] Abriendo modal...');
         if (this.modal) {
@@ -595,68 +659,5 @@ export class ConfigModal {
         });
         // Recargar las API keys guardadas después de limpiar
         this.loadSavedApiKeys();
-    }
-
-    async saveConfig() {
-        console.log('[ConfigModal] Guardando configuración...');
-        const newConfig = {
-            search: {
-                ontologyMode: document.querySelector('input[name="searchMode"]:checked').value,
-                dbMode: document.querySelector('input[name="dbMode"]:checked').value,
-                openai: {
-                    useOriginalTerm: document.querySelector('input[name="useOriginalTerm"]').checked,
-                    useEnglishTerm: document.querySelector('input[name="useEnglishTerm"]').checked,
-                    useRelatedTerms: document.querySelector('input[name="useRelatedTerms"]').checked,
-                    useTestTypes: document.querySelector('input[name="useTestTypes"]').checked,
-                    useLoincCodes: document.querySelector('input[name="useLoincCodes"]').checked,
-                    useKeywords: document.querySelector('input[name="useKeywords"]').checked
-                }
-            },
-            sql: {
-                maxTotal: parseInt(document.querySelector('input[name="sqlMaxTotal"]').value),
-                maxPerKeyword: parseInt(document.querySelector('input[name="maxPerKeyword"]').value),
-                maxKeywords: parseInt(document.querySelector('input[name="maxKeywords"]').value),
-                strictMode: document.querySelector('input[name="sqlMode"][value="strict"]').checked
-            },
-            elastic: {
-                limits: {
-                    maxTotal: parseInt(document.querySelector('#elasticSection input[name="maxTotal"]').value),
-                    maxPerKeyword: parseInt(document.querySelector('#elasticSection input[name="maxPerKeyword"]').value)
-                },
-                searchTypes: {
-                    exact: {
-                        enabled: document.querySelector('input[name="exactEnabled"]').checked,
-                        priority: parseInt(document.querySelector('input[name="exactPriority"]').value)
-                    },
-                    fuzzy: {
-                        enabled: document.querySelector('input[name="fuzzyEnabled"]').checked,
-                        tolerance: parseInt(document.querySelector('input[name="fuzzyTolerance"]').value)
-                    },
-                    smart: {
-                        enabled: document.querySelector('input[name="smartEnabled"]').checked,
-                        precision: parseInt(document.querySelector('input[name="smartPrecision"]').value)
-                    }
-                },
-                showAdvanced: document.getElementById('showAdvanced').checked
-            },
-            performance: {
-                maxCacheSize: parseInt(document.querySelector('input[name="maxCacheSize"]').value),
-                cacheExpiry: parseInt(document.querySelector('input[name="cacheExpiry"]').value)
-            }
-        };
-
-        try {
-            const currentConfig = await storage.getConfig();
-            const hasChanges = JSON.stringify(currentConfig) !== JSON.stringify(newConfig);
-            
-            if (hasChanges) {
-                await storage.setConfig(newConfig);
-                notifications.success('Configuración guardada correctamente');
-                this.hasUnsavedChanges = false;
-            }
-        } catch (error) {
-            console.error('[ConfigModal] Error al guardar:', error);
-            notifications.error('Error al guardar la configuración');
-        }
     }
 } 

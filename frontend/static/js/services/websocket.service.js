@@ -5,106 +5,181 @@ class WebSocketService {
     constructor() {
         this.socket = null;
         this.connected = false;
-        this.retryCount = 0;
-        this.maxRetries = 3;
+        this.pendingRequests = new Map();
+        this.requestId = 0;
     }
 
     /**
      * Inicia la conexión WebSocket
      */
-    connect() {
-        const options = {
-            transports: ['websocket'],
-            upgrade: false,
-            reconnection: true,
-            reconnectionAttempts: this.maxRetries,
-            reconnectionDelay: 1000
-        };
-        
-        this.socket = io('http://localhost:5001', options);
-        this.setupListeners();
-    }
+    async connect() {
+        if (this.socket) {
+            return;
+        }
 
-    /**
-     * Configura los listeners de eventos WebSocket
-     */
-    setupListeners() {
-        this.socket.on('connect', () => {
-            console.log('WebSocket conectado');
-            this.connected = true;
-            this.retryCount = 0;
-        });
-
-        this.socket.on('disconnect', () => {
-            console.log('WebSocket desconectado');
-            this.connected = false;
-            this.reconnect();
-        });
-
-        // Listener para obtener valor del localStorage
-        this.socket.on('storage.get_value', async (data) => {
+        return new Promise((resolve, reject) => {
             try {
-                const { request_id, key } = data;
-                const value = localStorage.getItem(key);
-                
-                this.socket.emit('storage.value', {
-                    request_id,
-                    key,
-                    value: value ? JSON.parse(value) : null
+                this.socket = io('http://localhost:5001', {
+                    transports: ['websocket']
                 });
-            } catch (error) {
-                console.error('Error al obtener valor:', error);
-            }
-        });
 
-        // Listener para establecer valor en localStorage
-        this.socket.on('storage.set_value', (data) => {
-            try {
-                const { key, value } = data;
-                localStorage.setItem(key, JSON.stringify(value));
-            } catch (error) {
-                console.error('Error al establecer valor:', error);
-            }
-        });
+                this.socket.on('connect', () => {
+                    console.log('🔌 Conectado al servidor WebSocket');
+                    this.connected = true;
+                    resolve();
+                });
 
-        // Listener para obtener tablas disponibles
-        this.socket.on('storage.get_tables', () => {
-            try {
-                const tables = [];
-                for (let i = 0; i < localStorage.length; i++) {
-                    const key = localStorage.key(i);
+                this.socket.on('connect_error', (error) => {
+                    console.error('❌ Error de conexión:', error);
+                    reject(error);
+                });
+
+                this.socket.on('storage.value', (data) => {
+                    const requestId = data.request_id;
+                    if (this.pendingRequests.has(requestId)) {
+                        const { resolve } = this.pendingRequests.get(requestId);
+                        resolve(data.value);
+                        this.pendingRequests.delete(requestId);
+                    }
+                });
+
+                this.socket.on('storage.tables_received', (data) => {
+                    const requestId = data.request_id;
+                    if (this.pendingRequests.has(requestId)) {
+                        const { resolve } = this.pendingRequests.get(requestId);
+                        resolve(data.tables);
+                        this.pendingRequests.delete(requestId);
+                    }
+                });
+
+                this.socket.on('storage.set_value', async (data) => {
+                    const { key, value } = data;
+                    try {
+                        await localStorage.setItem(key, JSON.stringify(value));
+                        this.socket.emit('storage.value_set', { 
+                            status: 'success',
+                            key
+                        });
+                    } catch (error) {
+                        this.socket.emit('storage.value_set', { 
+                            status: 'error',
+                            key,
+                            error: error.message
+                        });
+                    }
+                });
+
+                this.socket.on('storage.get_value', async (data) => {
+                    const { key, request_id } = data;
                     try {
                         const value = JSON.parse(localStorage.getItem(key));
-                        if (typeof value === 'object') {
-                            tables.push({
-                                name: key,
-                                size: new Blob([JSON.stringify(value)]).size,
-                                entries: Object.keys(value).length
-                            });
-                        }
-                    } catch (e) {
-                        // No es una tabla JSON válida
-                        continue;
+                        this.socket.emit('storage.value', {
+                            request_id,
+                            value
+                        });
+                    } catch (error) {
+                        this.socket.emit('storage.value', {
+                            request_id,
+                            error: error.message
+                        });
                     }
-                }
-                
-                this.socket.emit('storage.tables', { tables });
+                });
+
+                this.socket.on('storage.get_tables', () => {
+                    const tables = Object.keys(localStorage);
+                    this.socket.emit('storage.tables', {
+                        tables
+                    });
+                });
+
             } catch (error) {
-                console.error('Error al obtener tablas:', error);
+                console.error('❌ Error inicializando WebSocket:', error);
+                reject(error);
             }
         });
     }
 
     /**
-     * Intenta reconectar el WebSocket
+     * Cierra la conexión WebSocket
      */
-    reconnect() {
-        if (this.retryCount < this.maxRetries) {
-            this.retryCount++;
-            setTimeout(() => this.connect(), 1000 * this.retryCount);
+    async disconnect() {
+        if (this.socket) {
+            this.socket.disconnect();
+            this.socket = null;
+            this.connected = false;
         }
+    }
+
+    /**
+     * Obtiene el valor de una clave almacenada en localStorage
+     * @param {string} key - La clave del valor almacenado en localStorage
+     * @returns {Promise<any>} - El valor almacenado en localStorage
+     */
+    async getValue(key) {
+        if (!this.connected) {
+            throw new Error('WebSocket no conectado');
+        }
+
+        const requestId = `req_${this.requestId++}`;
+        return new Promise((resolve, reject) => {
+            const timeout = setTimeout(() => {
+                this.pendingRequests.delete(requestId);
+                reject(new Error('Timeout esperando respuesta'));
+            }, 5000);
+
+            this.pendingRequests.set(requestId, { resolve, reject, timeout });
+            this.socket.emit('storage.get_value', { key, request_id: requestId });
+        });
+    }
+
+    /**
+     * Establece el valor de una clave almacenada en localStorage
+     * @param {string} key - La clave del valor almacenado en localStorage
+     * @param {any} value - El valor a almacenar en localStorage
+     * @returns {Promise<void>} - Una promesa que se resuelve cuando el valor se almacena correctamente
+     */
+    async setValue(key, value) {
+        if (!this.connected) {
+            throw new Error('WebSocket no conectado');
+        }
+
+        const requestId = `req_${this.requestId++}`;
+        return new Promise((resolve, reject) => {
+            const timeout = setTimeout(() => {
+                this.pendingRequests.delete(requestId);
+                reject(new Error('Timeout esperando respuesta'));
+            }, 5000);
+
+            this.pendingRequests.set(requestId, { resolve, reject, timeout });
+            this.socket.emit('storage.set_value', { key, value, request_id: requestId });
+        });
+    }
+
+    /**
+     * Obtiene las tablas disponibles almacenadas en localStorage
+     * @returns {Promise<Array<{name: string, size: number, entries: number}>>} - Un array de objetos que representan las tablas disponibles
+     */
+    async getTables() {
+        if (!this.connected) {
+            throw new Error('WebSocket no conectado');
+        }
+
+        const requestId = `req_${this.requestId++}`;
+        return new Promise((resolve, reject) => {
+            const timeout = setTimeout(() => {
+                this.pendingRequests.delete(requestId);
+                reject(new Error('Timeout esperando respuesta'));
+            }, 5000);
+
+            this.pendingRequests.set(requestId, { resolve, reject, timeout });
+            this.socket.emit('storage.get_tables', { request_id: requestId });
+        });
     }
 }
 
-// Exportar instancia global
-window.webSocketService = new WebSocketService(); 
+// Crear instancia global
+const websocketService = new WebSocketService();
+
+// Exportar como módulo y asignar a window
+export { websocketService };
+window.webSocketService = websocketService; 
