@@ -71,8 +71,16 @@ class EncryptionService {
                     // Obtener la master key del backend
                     let masterKey = null;
                     if (window.socket?.connected) {
+                        // Obtener el installTimestamp
+                        const installTimestamp = localStorage.getItem('installTimestamp');
+                        if (!installTimestamp) {
+                            console.warn('[Encryption] No hay installTimestamp disponible');
+                            reject(new Error('No hay installTimestamp disponible'));
+                            return;
+                        }
+
                         console.log('[Encryption] Solicitando master key al servidor...');
-                        window.socket.emit('encryption.get_master_key');
+                        window.socket.emit('encryption.get_master_key', { installTimestamp });
                         
                         masterKey = await new Promise((resolveKey) => {
                             const timeoutId = setTimeout(() => {
@@ -83,8 +91,13 @@ class EncryptionService {
 
                             window.socket.once('encryption.master_key', (data) => {
                                 clearTimeout(timeoutId);
-                                console.log('[Encryption] Master key recibida del servidor');
-                                resolveKey(data.key);
+                                if (data.error) {
+                                    console.error('[Encryption] Error recibiendo master key:', data.error);
+                                    resolveKey(null);
+                                } else {
+                                    console.log('[Encryption] Master key recibida del servidor');
+                                    resolveKey(data.key);
+                                }
                             });
                         });
                     }
@@ -100,7 +113,8 @@ class EncryptionService {
                     if (!masterKey) {
                         throw new Error('No se pudo obtener la master key del servidor');
                     }
-                    
+
+                    // Importar la master key
                     const keyBuffer = new Uint8Array(masterKey.match(/.{2}/g).map(byte => parseInt(byte, 16)));
                     this.masterKey = await crypto.subtle.importKey(
                         'raw',

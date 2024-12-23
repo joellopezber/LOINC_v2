@@ -55,10 +55,9 @@ class WebSocketService:
             
     def _setup_handlers(self):
         @self.socketio.on('connect')
-        def handle_connect():
+        def handle_connect(auth):
             logger.info("🔌 Cliente conectado")
-            master_key = encryption_service.get_master_key()
-            emit('encryption.master_key', {'key': master_key})
+            # No enviamos la master key en la conexión, esperamos el installTimestamp
             emit('connect_response', {'status': 'success'})
             
         @self.socketio.on('disconnect')
@@ -66,10 +65,17 @@ class WebSocketService:
             logger.info("🔌 Cliente desconectado")
             
         @self.socketio.on('encryption.get_master_key')
-        def handle_get_master_key():
+        def handle_get_master_key(data):
             """Maneja la solicitud de obtener la master key"""
             logger.info("Cliente solicitando master key")
-            master_key = encryption_service.get_master_key()
+            install_timestamp = data.get('installTimestamp')
+            
+            if not install_timestamp:
+                logger.error("❌ No se proporcionó installTimestamp")
+                emit('encryption.master_key', {'error': 'installTimestamp required'})
+                return
+                
+            master_key = encryption_service.get_key_for_install(install_timestamp)
             emit('encryption.master_key', {'key': master_key})
             logger.info("Master key enviada al cliente")
 

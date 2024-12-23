@@ -209,7 +209,7 @@ export class ConfigModal {
         const toggleButtons = document.querySelectorAll('.api-key-toggle');
         toggleButtons.forEach(button => {
             button.addEventListener('click', () => {
-                const input = button.previousElementSibling;
+                const input = button.closest('.api-key-input-group').querySelector('.api-key-input');
                 const icon = button.querySelector('.material-icons');
                 if (input.type === 'password') {
                     input.type = 'text';
