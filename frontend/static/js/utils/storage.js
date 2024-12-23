@@ -1,48 +1,5 @@
 import { encryption } from './encryption.js';
-
-// Configuración por defecto
-const defaultConfig = {
-    search: {
-        ontologyMode: 'multi_match',
-        dbMode: 'sql',
-        openai: {
-            useOriginalTerm: true,
-            useEnglishTerm: false,
-            useRelatedTerms: false,
-            useTestTypes: false,
-            useLoincCodes: false,
-            useKeywords: false
-        }
-    },
-    sql: {
-        maxTotal: 150,
-        maxPerKeyword: 100,
-        maxKeywords: 10,
-        strictMode: true,
-        sqlMaxTotal: 150
-    },
-    elastic: {
-        limits: {
-            maxTotal: 50,
-            maxPerKeyword: 10
-        },
-        searchTypes: {
-            exact: {
-                enabled: true,
-                priority: 10
-            },
-            fuzzy: {
-                enabled: true,
-                tolerance: 2
-            },
-            smart: {
-                enabled: true,
-                precision: 7
-            }
-        },
-        showAdvanced: false
-    }
-};
+import { DEFAULT_CONFIG } from '../config/default-config.js';
 
 // Esquema de validación
 const configSchema = {
@@ -59,32 +16,35 @@ const configSchema = {
         }
     },
     sql: {
-        maxTotal: { type: 'number', min: 1, max: 1000 },
-        maxPerKeyword: { type: 'number', min: 1, max: 100 },
-        maxKeywords: { type: 'number', min: 1, max: 50 },
-        strictMode: 'boolean',
-        sqlMaxTotal: { type: 'number', min: 1, max: 1000, optional: true }
+        maxTotal: 'number',
+        maxPerKeyword: 'number',
+        maxKeywords: 'number',
+        strictMode: 'boolean'
     },
     elastic: {
         limits: {
-            maxTotal: { type: 'number', min: 1, max: 1000 },
-            maxPerKeyword: { type: 'number', min: 1, max: 100 }
+            maxTotal: 'number',
+            maxPerKeyword: 'number'
         },
         searchTypes: {
             exact: {
                 enabled: 'boolean',
-                priority: { type: 'number', min: 1, max: 100 }
+                priority: 'number'
             },
             fuzzy: {
                 enabled: 'boolean',
-                tolerance: { type: 'number', min: 1, max: 10 }
+                tolerance: 'number'
             },
             smart: {
                 enabled: 'boolean',
-                precision: { type: 'number', min: 1, max: 10 }
+                precision: 'number'
             }
         },
         showAdvanced: 'boolean'
+    },
+    performance: {
+        maxCacheSize: 'number',
+        cacheExpiry: 'number'
     }
 };
 
@@ -145,22 +105,22 @@ class StorageService {
             
             if (!existingConfig) {
                 console.debug('[Storage] Primera inicialización, usando valores por defecto');
-                await this.setConfig(defaultConfig);
-                return defaultConfig;
+                await this.setConfig(DEFAULT_CONFIG);
+                return DEFAULT_CONFIG;
             }
 
             const parsedConfig = JSON.parse(existingConfig);
             if (!this.validateConfig(parsedConfig)) {
                 console.warn('[Storage] Configuración inválida, restaurando valores por defecto');
-                await this.setConfig(defaultConfig);
-                return defaultConfig;
+                await this.setConfig(DEFAULT_CONFIG);
+                return DEFAULT_CONFIG;
             }
 
             return parsedConfig;
         } catch (error) {
             console.error('[Storage] Error cargando configuración:', error);
-            await this.setConfig(defaultConfig);
-            return defaultConfig;
+            await this.setConfig(DEFAULT_CONFIG);
+            return DEFAULT_CONFIG;
         }
     }
 
@@ -268,10 +228,10 @@ class StorageService {
         try {
             const config = localStorage.getItem('searchConfig');
             console.debug('Obteniendo configuración:', config);
-            return config ? JSON.parse(config) : defaultConfig;
+            return config ? JSON.parse(config) : DEFAULT_CONFIG;
         } catch (error) {
             console.error('Error al leer la configuración:', error);
-            return defaultConfig;
+            return DEFAULT_CONFIG;
         }
     }
 
@@ -305,14 +265,14 @@ class StorageService {
             
             await this.createBackup();
             
-            if (!this.validateConfig(defaultConfig)) {
+            if (!this.validateConfig(DEFAULT_CONFIG)) {
                 console.error('[Storage] defaultConfig no es válido según el schema');
                 throw new Error('defaultConfig no es válido');
             }
             
-            localStorage.setItem('searchConfig', JSON.stringify(defaultConfig));
+            localStorage.setItem('searchConfig', JSON.stringify(DEFAULT_CONFIG));
             document.dispatchEvent(new CustomEvent('config:updated', { 
-                detail: { config: defaultConfig }
+                detail: { config: DEFAULT_CONFIG }
             }));
             
             return true;
