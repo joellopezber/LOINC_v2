@@ -7,17 +7,38 @@ import logging
 import base64
 import traceback
 import hashlib
+from dotenv import load_dotenv
+from pathlib import Path
 
 # Configurar logging
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Obtener el directorio raíz del proyecto (2 niveles arriba desde este archivo)
+ROOT_DIR = Path(__file__).resolve().parent.parent.parent
+
+# Cargar variables de entorno desde el directorio raíz
+load_dotenv(ROOT_DIR / '.env')
 
 class EncryptionService:
     def __init__(self):
         """Inicializa el servicio de encriptación"""
         logger.info("Inicializando encryption service...")
-        # Sal única para el servidor (se puede guardar en config o generar al inicio)
-        self.server_salt = os.environ.get('SERVER_SALT', 'default_salt_12345').encode()
+        
+        # Obtener el salt del archivo .env
+        env_salt = os.getenv('SALT_MASTER_KEY')
+        if not env_salt:
+            logger.error("❌ SALT_MASTER_KEY no encontrado en .env")
+            raise ValueError("SALT_MASTER_KEY debe estar configurado en el archivo .env")
+            
+        # Convertir el salt hexadecimal a bytes
+        try:
+            self.server_salt = bytes.fromhex(env_salt)
+            logger.info("✅ SALT_MASTER_KEY cargado correctamente")
+        except ValueError as e:
+            logger.error("❌ Error al decodificar SALT_MASTER_KEY: debe ser una cadena hexadecimal válida")
+            raise ValueError("SALT_MASTER_KEY debe ser una cadena hexadecimal válida") from e
+            
         self.install_keys = {}  # Diccionario para almacenar claves por installTimestamp
     
     def generate_deterministic_key(self, install_timestamp):
