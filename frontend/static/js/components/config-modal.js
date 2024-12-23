@@ -18,8 +18,6 @@ export class ConfigModal {
         this.hasUnsavedApiKeys = false;
         
         this.initializeEventListeners();
-        this.loadSavedConfig();
-        this.loadSavedApiKeys();
         
         // Escuchar eventos globales de apertura/cierre
         document.addEventListener('modal:open', () => this.open());
@@ -90,10 +88,13 @@ export class ConfigModal {
         }
     }
 
-    open() {
+    async open() {
         console.log('[ConfigModal] Abriendo modal...');
         if (this.modal) {
             this.modal.classList.add('visible');
+            // Cargar configuración y API keys
+            await this.loadSavedConfig();
+            await this.loadSavedApiKeys();
             // Activar la primera sección por defecto
             this.activateSection('search');
         }
@@ -110,7 +111,7 @@ export class ConfigModal {
             }
             this.modal.classList.remove('visible');
             this.resetChangeTracking();
-            this.resetApiKeyInputs();
+            this.resetApiKeyInputs(false);
         }
     }
 
@@ -434,15 +435,27 @@ export class ConfigModal {
         console.log('[ConfigModal] Cargando API keys guardadas...');
         const providers = ['openai', 'anthropic', 'google'];
         
+        // Cachear las API keys para evitar lecturas duplicadas
+        const apiKeys = {};
         for (const provider of providers) {
-            const hasKey = await apiKeyService.hasApiKey(provider);
+            apiKeys[provider] = {
+                hasKey: await apiKeyService.hasApiKey(provider),
+                value: null
+            };
+            
+            if (apiKeys[provider].hasKey) {
+                apiKeys[provider].value = await apiKeyService.getApiKey(provider);
+            }
+        }
+        
+        // Actualizar UI con valores cacheados
+        for (const provider of providers) {
             const input = document.querySelector(`input[name="${provider}ApiKey"]`);
             const button = document.querySelector(`button[data-provider="${provider}"].api-key-test`);
             
-            if (hasKey) {
-                const apiKey = await apiKeyService.getApiKey(provider);
+            if (apiKeys[provider].hasKey) {
                 if (input) {
-                    input.value = apiKey;
+                    input.value = apiKeys[provider].value;
                     await this.updateApiKeyStatus(provider, true);
                 }
                 if (button) {
@@ -641,7 +654,7 @@ export class ConfigModal {
         }
     }
 
-    resetApiKeyInputs() {
+    resetApiKeyInputs(shouldReload = true) {
         const providers = ['openai', 'anthropic', 'google'];
         providers.forEach(provider => {
             const input = document.querySelector(`input[name="${provider}ApiKey"]`);
@@ -657,7 +670,9 @@ export class ConfigModal {
                 this.updateApiKeyStatus(provider, false);
             }
         });
-        // Recargar las API keys guardadas después de limpiar
-        this.loadSavedApiKeys();
+        // Recargar las API keys guardadas solo si es necesario
+        if (shouldReload) {
+            this.loadSavedApiKeys();
+        }
     }
 } 

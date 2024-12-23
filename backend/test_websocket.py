@@ -1,95 +1,134 @@
-import websockets
-import asyncio
+import socketio
 import json
+import sys
+import time
+import os
 
-async def main():
-    uri = "ws://localhost:5001/socket.io/?EIO=4&transport=websocket"
-    
-    async with websockets.connect(uri) as websocket:
-        print("🔌 Conectado al servidor")
+class TestWebSocket:
+    def __init__(self):
+        print("\n🔍 Probando conexión con servidor existente en localhost:5001...")
+        self.sio = socketio.Client(ssl_verify=False)
+        self.connected = False
+        self.update_received = False
+        self.current_config = None
+        self.setup_handlers()
         
-        # Recibir mensaje de apertura
-        response = await websocket.recv()
-        print(f"📬 Mensaje de apertura: {response}")
-        
-        # Enviar mensaje de conexión
-        await websocket.send("40")
-        
-        # Recibir respuesta de conexión
-        response = await websocket.recv()
-        print(f"📬 Respuesta de conexión: {response}")
-        
-        # Enviar ping para mantener la conexión
-        await websocket.send("2")
-        
-        # Solicitar tablas
-        print("\n📋 Solicitando tablas disponibles...")
-        await websocket.send('42["storage.get_tables"]')
-        
-        # Esperar y procesar respuestas
-        try:
-            while True:
-                response = await websocket.recv()
-                
-                # Ignorar mensajes de ping/pong
-                if response in ["2", "3"]:
-                    continue
-                    
-                # Procesar mensajes de datos
-                if response.startswith('42'):
-                    try:
-                        data = json.loads(response[2:])
-                        if isinstance(data, list) and len(data) > 1:
-                            event = data[0]
-                            payload = data[1]
-                            
-                            if event == "storage.tables_received":
-                                print(f"\n📋 Tablas disponibles: {json.dumps(payload, indent=2)}")
-                                break
-                    except json.JSONDecodeError:
-                        print(f"❌ Error decodificando JSON: {response}")
-                        continue
-                
-        except websockets.exceptions.ConnectionClosed:
-            print("❌ Conexión cerrada")
-            return
+    def setup_handlers(self):
+        @self.sio.on('connect')
+        def on_connect():
+            print("✅ Conexión establecida")
+            self.connected = True
             
-        # Enviar ping para mantener la conexión
-        await websocket.send("2")
-        
-        # Solicitar configuración
-        print("\n⚙️ Solicitando configuración...")
-        await websocket.send('42["storage.get_value",{"key":"searchConfig"}]')
-        
-        # Esperar y procesar respuestas
+        @self.sio.on('connect_response')
+        def on_connect_response(data):
+            print("📬 Respuesta del servidor:", json.dumps(data, indent=2))
+            
+        @self.sio.on('storage.value_updated')
+        def on_value_updated(data):
+            """Recibe actualización broadcast del servidor"""
+            print("\n📥 Actualización broadcast recibida:", json.dumps(data, indent=2))
+            self.update_received = True
+            
+        @self.sio.on('storage_value')
+        def on_storage_value(data):
+            """Recibe valor actual del storage"""
+            print("\n📦 Configuración actual recibida:", json.dumps(data, indent=2))
+            if 'value' in data:
+                self.current_config = data['value']
+                
+    def get_current_config(self):
+        """Obtiene la configuración actual del servidor"""
+        print("\n2️⃣ Obteniendo configuración actual...")
+        self.sio.emit('storage.get_value', {
+            'key': 'searchConfig',
+            'request_id': 'get_config'
+        })
+        # Esperar a recibir la configuración
+        start = time.time()
+        while time.time() - start < 5:  # Esperar máximo 5 segundos
+            if self.current_config:
+                print("✅ Configuración actual obtenida")
+                return True
+            time.sleep(0.1)
+        print("❌ Error: No se pudo obtener la configuración actual")
+        return False
+                
+    def run_test(self):
         try:
-            while True:
-                response = await websocket.recv()
+            # 1. Conectar al servidor existente
+            print("\n1️⃣ Conectando al servidor existente...")
+            self.sio.connect('http://localhost:5001', transports=['websocket'])
+            time.sleep(1)
+            
+            if not self.connected:
+                print("❌ Error: No se pudo conectar al servidor")
+                return False
                 
-                # Ignorar mensajes de ping/pong
-                if response in ["2", "3"]:
-                    continue
-                    
-                # Procesar mensajes de datos
-                if response.startswith('42'):
-                    try:
-                        data = json.loads(response[2:])
-                        if isinstance(data, list) and len(data) > 1:
-                            event = data[0]
-                            payload = data[1]
-                            
-                            if event == "storage.value":
-                                print(f"\n⚙️ Configuración: {json.dumps(payload, indent=2)}")
-                                break
-                    except json.JSONDecodeError:
-                        print(f"❌ Error decodificando JSON: {response}")
-                        continue
+            # 2. Obtener configuración actual
+            if not self.get_current_config():
+                return False
                 
-        except websockets.exceptions.ConnectionClosed:
-            print("❌ Conexión cerrada")
-            return
-        
-        print("\n✅ Prueba completada")
-
-if __name__ == "__main__":
-    asyncio.run(main()) 
+            # 3. Modificar configuración
+            print("\n3️⃣ Modificando configuración...")
+            if not self.current_config:
+                self.current_config = {}
+            
+            # Asegurarnos que la estructura existe
+            if 'search' not in self.current_config:
+                self.current_config['search'] = {}
+            if 'openai' not in self.current_config['search']:
+                self.current_config['search']['openai'] = {}
+                
+            # Modificar valores específicos
+            self.current_config['search'].update({
+                'ontologyMode': 'multi_match',
+                'dbMode': 'sql'  # Cambio simulado
+            })
+            self.current_config['search']['openai'].update({
+                'useOriginalTerm': True,
+                'useEnglishTerm': False,
+                'useRelatedTerms': False,
+                'useTestTypes': False,
+                'useLoincCodes': True,
+                'useKeywords': True
+            })
+            
+            # 4. Enviar actualización
+            print("\n4️⃣ Enviando actualización al servidor...")
+            self.sio.emit('storage.set_value', {
+                'key': 'searchConfig',
+                'value': self.current_config,
+                'request_id': 'test_update'
+            })
+            
+            # 5. Esperar broadcast
+            print("\n5️⃣ Esperando broadcast del servidor...")
+            start = time.time()
+            while time.time() - start < 5:  # Esperar máximo 5 segundos
+                if self.update_received:
+                    print("✅ Broadcast recibido correctamente")
+                    break
+                time.sleep(0.1)
+            
+            if not self.update_received:
+                print("❌ Error: No se recibió el broadcast del servidor")
+                return False
+                
+            print("\n✅ Prueba completada exitosamente")
+            return True
+            
+        except Exception as e:
+            print(f"❌ Error en la prueba: {e}")
+            return False
+        finally:
+            print("\n👋 Desconectando del servidor...")
+            try:
+                self.sio.disconnect()
+            except:
+                pass
+            print("✅ Desconectado correctamente")
+            
+if __name__ == '__main__':
+    test = TestWebSocket()
+    success = test.run_test()
+    sys.exit(0 if success else 1) 

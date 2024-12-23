@@ -223,15 +223,27 @@ class StorageService {
         }
     }
 
+    /**
+     * Guarda la configuración en localStorage
+     */
     async setConfig(config) {
         try {
+            // Validar configuración
             if (!this.validateConfig(config)) {
                 throw new Error('Configuración inválida');
             }
+
+            // Guardar en localStorage
             localStorage.setItem('searchConfig', JSON.stringify(config));
-            document.dispatchEvent(new CustomEvent('config:updated', { detail: config }));
+            console.log('Configuración guardada:', config);
+
+            // Emitir evento para que storage.service.js lo capture
+            const event = new CustomEvent('storage:config_updated', { detail: config });
+            window.dispatchEvent(event);
+
+            return true;
         } catch (error) {
-            console.error('[Storage] Error al guardar configuración:', error);
+            console.error('Error al guardar configuración:', error);
             throw error;
         }
     }

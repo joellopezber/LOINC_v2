@@ -10,14 +10,47 @@ def connect():
         'key': 'searchConfig',
         'value': {
             'search': {
-                'ontologyMode': 'multi_match',
-                'dbMode': 'elastic'
+                'ontologyMode': 'openai',
+                'dbMode': 'sql',
+                'openai': {
+                    'useOriginalTerm': True,
+                    'useEnglishTerm': False,
+                    'useRelatedTerms': False,
+                    'useTestTypes': False,
+                    'useLoincCodes': False,
+                    'useKeywords': False
+                }
+            },
+            'sql': {
+                'maxTotal': 150,
+                'maxPerKeyword': 10,
+                'maxKeywords': 10,
+                'strictMode': True
             },
             'elastic': {
                 'limits': {
-                    'maxTotal': 100,
-                    'maxPerKeyword': 10
-                }
+                    'maxTotal': 50,
+                    'maxPerKeyword': 20
+                },
+                'searchTypes': {
+                    'exact': {
+                        'enabled': True,
+                        'priority': 10
+                    },
+                    'fuzzy': {
+                        'enabled': True,
+                        'tolerance': 2
+                    },
+                    'smart': {
+                        'enabled': True,
+                        'precision': 7
+                    }
+                },
+                'showAdvanced': False
+            },
+            'performance': {
+                'maxCacheSize': 100,
+                'cacheExpiry': 24
             }
         }
     })

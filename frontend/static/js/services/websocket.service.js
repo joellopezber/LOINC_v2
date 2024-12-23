@@ -23,6 +23,9 @@ class WebSocketService {
                     transports: ['websocket']
                 });
 
+                // Exponer el socket globalmente
+                window.socket = this.socket;
+
                 this.socket.on('connect', () => {
                     console.log('🔌 Conectado al servidor WebSocket');
                     this.connected = true;
@@ -34,7 +37,9 @@ class WebSocketService {
                     reject(error);
                 });
 
-                this.socket.on('storage.value', (data) => {
+                // Manejar respuesta de valor
+                this.socket.on('storage_value', (data) => {
+                    console.log('📦 Valor recibido:', data);
                     const requestId = data.request_id;
                     if (this.pendingRequests.has(requestId)) {
                         const { resolve } = this.pendingRequests.get(requestId);
@@ -43,7 +48,9 @@ class WebSocketService {
                     }
                 });
 
-                this.socket.on('storage.tables_received', (data) => {
+                // Manejar respuesta de tablas
+                this.socket.on('storage_tables_received', (data) => {
+                    console.log('📋 Tablas recibidas:', data);
                     const requestId = data.request_id;
                     if (this.pendingRequests.has(requestId)) {
                         const { resolve } = this.pendingRequests.get(requestId);
@@ -52,44 +59,15 @@ class WebSocketService {
                     }
                 });
 
-                this.socket.on('storage.set_value', async (data) => {
-                    const { key, value } = data;
-                    try {
-                        await localStorage.setItem(key, JSON.stringify(value));
-                        this.socket.emit('storage.value_set', { 
-                            status: 'success',
-                            key
-                        });
-                    } catch (error) {
-                        this.socket.emit('storage.value_set', { 
-                            status: 'error',
-                            key,
-                            error: error.message
-                        });
+                // Manejar respuesta de set_value
+                this.socket.on('storage.value_set', (data) => {
+                    console.log('💾 Valor guardado:', data);
+                    const requestId = data.request_id;
+                    if (this.pendingRequests.has(requestId)) {
+                        const { resolve } = this.pendingRequests.get(requestId);
+                        resolve(data);
+                        this.pendingRequests.delete(requestId);
                     }
-                });
-
-                this.socket.on('storage.get_value', async (data) => {
-                    const { key, request_id } = data;
-                    try {
-                        const value = JSON.parse(localStorage.getItem(key));
-                        this.socket.emit('storage.value', {
-                            request_id,
-                            value
-                        });
-                    } catch (error) {
-                        this.socket.emit('storage.value', {
-                            request_id,
-                            error: error.message
-                        });
-                    }
-                });
-
-                this.socket.on('storage.get_tables', () => {
-                    const tables = Object.keys(localStorage);
-                    this.socket.emit('storage.tables', {
-                        tables
-                    });
                 });
 
             } catch (error) {
@@ -106,14 +84,13 @@ class WebSocketService {
         if (this.socket) {
             this.socket.disconnect();
             this.socket = null;
+            window.socket = null;
             this.connected = false;
         }
     }
 
     /**
      * Obtiene el valor de una clave almacenada en localStorage
-     * @param {string} key - La clave del valor almacenado en localStorage
-     * @returns {Promise<any>} - El valor almacenado en localStorage
      */
     async getValue(key) {
         if (!this.connected) {
@@ -134,9 +111,6 @@ class WebSocketService {
 
     /**
      * Establece el valor de una clave almacenada en localStorage
-     * @param {string} key - La clave del valor almacenado en localStorage
-     * @param {any} value - El valor a almacenar en localStorage
-     * @returns {Promise<void>} - Una promesa que se resuelve cuando el valor se almacena correctamente
      */
     async setValue(key, value) {
         if (!this.connected) {
@@ -157,7 +131,6 @@ class WebSocketService {
 
     /**
      * Obtiene las tablas disponibles almacenadas en localStorage
-     * @returns {Promise<Array<{name: string, size: number, entries: number}>>} - Un array de objetos que representan las tablas disponibles
      */
     async getTables() {
         if (!this.connected) {
