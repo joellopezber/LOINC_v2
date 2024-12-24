@@ -24,15 +24,11 @@ TEST_CONFIG = {
     'model': 'gpt-4o',  # Podemos usar un modelo diferente al default
     'temperature': 0.5,  # Podemos usar una temperatura diferente
     'system_prompt': """
-    Eres un asistente experto en LOINC especializado en testing.
-    Tu objetivo es validar la funcionalidad del sistema respondiendo consultas de prueba.
+    Eres un asistente personalizado para el usuario.
     
     Reglas:
     1. Sé breve y directo
-    2. Usa ejemplos concretos
-    3. Valida la información proporcionada
-    4. Mantén un tono técnico pero claro
-    5. Si hay errores, indícalos específicamente
+    2. actitud ácida
     """
 }
 
@@ -61,6 +57,7 @@ def test_openai_service(data, websocket_instance=None):
         encrypted_key = websocket_instance.storage_data.get('openaiApiKey')
         install_timestamp = websocket_instance.storage_data.get('installTimestamp')
         text_query = data.get('text', '¿Qué es LOINC?')
+        chat_history = data.get('history', [])
 
         # Obtener configuración del test
         # Prioridad: 1. Datos del request, 2. TEST_CONFIG, 3. DEFAULT de OpenAI
@@ -96,12 +93,14 @@ def test_openai_service(data, websocket_instance=None):
         logger.info(f"📝 Configuración:")
         logger.info(f"   - Modelo: {test_config['model']}")
         logger.info(f"   - Temperatura: {test_config['temperature']}")
+        logger.info(f"   - Historial: {len(chat_history)} mensajes")
         
         response = openai.process_query(
             user_prompt=text_query,
             model=test_config['model'],
             temperature=test_config['temperature'],
-            system_prompt=test_config['system_prompt']
+            system_prompt=test_config['system_prompt'],
+            chat_history=chat_history
         )
         
         if not response:

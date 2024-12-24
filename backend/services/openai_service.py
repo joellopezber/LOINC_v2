@@ -1,7 +1,7 @@
 import os
 import logging
 from openai import OpenAI
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 from .encryption_service import encryption_service
 
 # Configurar logging
@@ -70,7 +70,8 @@ class OpenAIService:
         user_prompt: str,
         model: str = DEFAULT_MODEL,
         temperature: float = DEFAULT_TEMPERATURE,
-        system_prompt: str = DEFAULT_SYSTEM_PROMPT
+        system_prompt: str = DEFAULT_SYSTEM_PROMPT,
+        chat_history: List[Dict[str, str]] = None
     ) -> Optional[str]:
         """
         Procesa una consulta usando OpenAI
@@ -79,6 +80,7 @@ class OpenAIService:
             model: Modelo a usar (default: gpt-4o)
             temperature: Temperatura para la respuesta (default: 0.7)
             system_prompt: Prompt de sistema (default: prompt básico)
+            chat_history: Historial de conversación (default: None)
         Returns:
             Respuesta de OpenAI o None si hay error
         """
@@ -95,14 +97,33 @@ class OpenAIService:
             logger.info(f"🔄 Procesando consulta:")
             logger.info(f"📝 Modelo: {model}")
             logger.info(f"🌡️ Temperatura: {temperature}")
+            
+            # Construir mensajes
+            messages = [{"role": "system", "content": system_prompt}]
+            
+            # Añadir historial si existe
+            if chat_history:
+                # Filtrar el último mensaje si es del usuario (evitar duplicados)
+                filtered_history = chat_history[:-1] if chat_history and chat_history[-1]['role'] == 'user' else chat_history
+                
+                for msg in filtered_history:
+                    messages.append({
+                        "role": msg["role"],
+                        "content": msg["content"]
+                    })
+            
+            # Añadir mensaje actual
+            messages.append({"role": "user", "content": user_prompt})
+
+            # Log de mensajes para debug
+            logger.debug("📨 Mensajes enviados a OpenAI:")
+            for msg in messages:
+                logger.debug(f"- [{msg['role']}]: {msg['content'][:50]}...")
 
             response = self.client.chat.completions.create(
                 model=model,
                 temperature=temperature,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt}
-                ]
+                messages=messages
             )
             return response.choices[0].message.content
             

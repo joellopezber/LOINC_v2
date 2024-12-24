@@ -1,6 +1,7 @@
 export class OpenAITester {
     constructor() {
         console.log('🔄 Inicializando OpenAI Tester...');
+        this.chatHistory = [];
         this.createInterface();
         this.bindEvents();
     }
@@ -184,6 +185,13 @@ export class OpenAITester {
             <div class="message-time">${this.formatTime()}</div>
         `;
         
+        // Añadir al historial
+        this.chatHistory.push({
+            role: isUser ? 'user' : 'assistant',
+            content: text,
+            timestamp: this.formatTime()
+        });
+        
         chatContainer.appendChild(messageDiv);
         chatContainer.scrollTop = chatContainer.scrollHeight;
     }
@@ -225,9 +233,10 @@ export class OpenAITester {
                 // Mostrar indicador de escritura
                 this.showTyping();
                 
-                // Enviar al backend
+                // Enviar al backend con el historial
                 window.socket.emit('openai.test_search', {
-                    text: searchText
+                    text: searchText,
+                    history: this.chatHistory
                 }, (response) => {
                     // Remover indicador de escritura
                     this.removeTyping();
