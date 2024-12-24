@@ -3,9 +3,13 @@ import logging
 import time
 import os
 from flask import Flask
-from services.openai_service import OpenAIService
+from services.openai_service import (
+    OpenAIService, 
+    DEFAULT_MODEL, 
+    DEFAULT_TEMPERATURE,
+    DEFAULT_SYSTEM_PROMPT
+)
 from services.websocket_service import WebSocketService
-from services.encryption_service import encryption_service
 import json
 
 # Configurar logging
@@ -15,10 +19,10 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Configuración por defecto para el test
-DEFAULT_TEST_CONFIG = {
-    'model': 'gpt-4o',
-    'temperature': 0.9,
+# Configuración específica para el test (sobreescribe los valores por defecto de OpenAI)
+TEST_CONFIG = {
+    'model': 'gpt-4o',  # Podemos usar un modelo diferente al default
+    'temperature': 0.5,  # Podemos usar una temperatura diferente
     'system_prompt': """
     Eres un asistente experto en LOINC especializado en testing.
     Tu objetivo es validar la funcionalidad del sistema respondiendo consultas de prueba.
@@ -59,10 +63,11 @@ def test_openai_service(data, websocket_instance=None):
         text_query = data.get('text', '¿Qué es LOINC?')
 
         # Obtener configuración del test
+        # Prioridad: 1. Datos del request, 2. TEST_CONFIG, 3. DEFAULT de OpenAI
         test_config = {
-            'model': data.get('model', DEFAULT_TEST_CONFIG['model']),
-            'temperature': data.get('temperature', DEFAULT_TEST_CONFIG['temperature']),
-            'system_prompt': data.get('system_prompt', DEFAULT_TEST_CONFIG['system_prompt'])
+            'model': data.get('model', TEST_CONFIG.get('model', DEFAULT_MODEL)),
+            'temperature': data.get('temperature', TEST_CONFIG.get('temperature', DEFAULT_TEMPERATURE)),
+            'system_prompt': data.get('system_prompt', TEST_CONFIG.get('system_prompt', DEFAULT_SYSTEM_PROMPT))
         }
 
         if not all([encrypted_key, install_timestamp]):
@@ -72,39 +77,11 @@ def test_openai_service(data, websocket_instance=None):
                 'message': 'Se requiere API Key e Installation Time',
                 'details': result
             }
-
-        # 2. Obtener master key
-        logger.info("\n2️⃣ Obteniendo master key...")
-        master_key = encryption_service.get_key_for_install(install_timestamp)
-        if not master_key:
-            logger.error("❌ Error obteniendo master key")
-            return {
-                'status': 'error',
-                'message': 'Error obteniendo master key',
-                'details': result
-            }
-        logger.info("✅ Master key obtenida correctamente")
-
-        # 3. Desencriptar API Key
-        logger.info("\n3️⃣ Desencriptando API Key...")
-        api_key = encryption_service.decrypt(encrypted_key, install_timestamp)
-        
-        if not api_key:
-            logger.error("❌ Error al desencriptar la API key")
-            return {
-                'status': 'error',
-                'message': 'Error al desencriptar la API key',
-                'details': result
-            }
-
-        # Mostrar key enmascarada
-        masked_key = f"{api_key[:4]}...{api_key[-4:]}"
-        logger.info(f"🔓 API Key desencriptada: {masked_key}")
-        
-        # 4. Inicializar OpenAI
-        logger.info("\n4️⃣ Inicializando servicio OpenAI...")
+            
+        # 2. Inicializar OpenAI con key encriptada
+        logger.info("\n2️⃣ Inicializando servicio OpenAI...")
         openai = OpenAIService()
-        success = openai.initialize(api_key)
+        success = openai.initialize_with_encrypted(encrypted_key, install_timestamp)
         
         if not success:
             logger.error("❌ Error inicializando OpenAI")
@@ -114,8 +91,8 @@ def test_openai_service(data, websocket_instance=None):
                 'details': result
             }
             
-        # 5. Procesar consulta
-        logger.info(f"\n5️⃣ Procesando consulta: {text_query}")
+        # 3. Procesar consulta
+        logger.info(f"\n3️⃣ Procesando consulta: {text_query}")
         logger.info(f"📝 Configuración:")
         logger.info(f"   - Modelo: {test_config['model']}")
         logger.info(f"   - Temperatura: {test_config['temperature']}")
@@ -135,7 +112,7 @@ def test_openai_service(data, websocket_instance=None):
                 'details': result
             }
             
-        # 6. Éxito
+        # 4. Éxito
         return {
             'status': 'success',
             'query': text_query,

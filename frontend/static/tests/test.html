@@ -55,6 +55,29 @@
             overflow-x: auto;
             font-size: 14px;
             margin: 10px 0;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+
+        .response-section {
+            margin-top: 20px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 8px;
+        }
+
+        .response-header {
+            font-weight: 500;
+            margin-bottom: 10px;
+            color: #374151;
+        }
+
+        .response-content {
+            background: white;
+            padding: 15px;
+            border-radius: 6px;
+            border: 1px solid #e5e7eb;
+            margin-top: 10px;
         }
         
         .success { color: #10B981; }
@@ -97,6 +120,28 @@
         #connectionStatus.disconnected::before {
             background-color: #DC2626;
         }
+
+        .config-info {
+            background: #f3f4f6;
+            padding: 12px;
+            border-radius: 6px;
+            margin-bottom: 15px;
+            font-family: monospace;
+        }
+
+        .query-section {
+            margin-bottom: 15px;
+            padding: 10px;
+            background: #e5e7eb;
+            border-radius: 6px;
+        }
+
+        .response-section {
+            background: #ffffff;
+            padding: 15px;
+            border-radius: 6px;
+            border: 1px solid #e5e7eb;
+        }
     </style>
 </head>
 <body>
@@ -120,15 +165,11 @@
     <!-- Scripts necesarios -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.min.js"></script>
     
-    <!-- Módulo principal -->
+    <!-- Módulos -->
     <script type="module">
         import { encryption } from '/static/js/utils/encryption.js';
         import { storage } from '/static/js/utils/storage.js';
         import { OpenAITester } from '/static/js/tests/openai-tester.js';
-
-        // Hacer disponible globalmente
-        window.encryption = encryption;
-        window.storage = storage;
 
         // Inicializar WebSocket
         window.socket = io('http://localhost:5001', {
