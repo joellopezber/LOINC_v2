@@ -4,6 +4,7 @@ eventlet.monkey_patch()
 from flask import Flask, render_template, send_from_directory
 from flask_cors import CORS
 from services.websocket_service import WebSocketService
+from tests.test_openai import handle_test_search
 import logging
 import os
 
@@ -26,6 +27,12 @@ CORS(app, resources={r"/*": {"origins": "*"}})
 
 # Inicializar WebSocket
 websocket = WebSocketService(app)
+
+# Registrar manejador de test
+@websocket.socketio.on('openai.test_search')
+def on_test_search(data):
+    """Maneja solicitudes de test de OpenAI"""
+    return handle_test_search(data, websocket)
 
 @app.route('/')
 def index():

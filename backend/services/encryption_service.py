@@ -1,12 +1,11 @@
-from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 import os
 import logging
 import base64
 import traceback
-import hashlib
 from dotenv import load_dotenv
 from pathlib import Path
 
@@ -74,62 +73,80 @@ class EncryptionService:
 
     def _derive_key(self, salt, master_key):
         """
-        Deriva una clave secundaria para un propósito específico.
-        Útil para generar claves diferentes para diferentes usos (ej: API keys, datos, etc.)
+        Deriva una clave usando HKDF, igual que en el frontend
         """
         # Convertir master_key de hex a bytes
         key_bytes = bytes.fromhex(master_key)
         
-        kdf = PBKDF2HMAC(
+        # Usar HKDF para derivar la clave
+        hkdf = HKDF(
             algorithm=hashes.SHA256(),
             length=32,
             salt=salt,
-            iterations=50000,
+            info=b'',
         )
-        return base64.urlsafe_b64encode(kdf.derive(key_bytes))
+        
+        return hkdf.derive(key_bytes)
 
     def encrypt(self, data, install_timestamp):
-        """Encripta datos usando la master key de la instalación"""
+        """
+        Encripta datos usando AES-GCM, igual que el frontend
+        """
         try:
             if not data:
                 return None
                 
+            # Obtener master key
             master_key = self.get_key_for_install(install_timestamp)
-            # Generar una sal única para esta encriptación
+            
+            # Generar salt y IV aleatorios
             salt = os.urandom(16)
-            # Derivar una clave específica para esta encriptación
+            iv = os.urandom(12)
+            
+            # Derivar clave específica
             key = self._derive_key(salt, master_key)
             
-            f = Fernet(key)
-            encrypted_data = f.encrypt(data.encode())
+            # Encriptar usando AES-GCM
+            aesgcm = AESGCM(key)
+            encrypted_data = aesgcm.encrypt(iv, data.encode(), None)
             
-            # Combinar sal y datos encriptados
-            return base64.urlsafe_b64encode(salt + encrypted_data).decode()
+            # Combinar salt + iv + datos encriptados
+            result = salt + iv + encrypted_data
+            
+            # Convertir a base64
+            return base64.b64encode(result).decode()
+            
         except Exception as e:
             logger.error(f"Error en encriptación: {e}")
             logger.error(traceback.format_exc())
             return None
 
     def decrypt(self, encrypted_data, install_timestamp):
-        """Desencripta datos usando la master key de la instalación"""
+        """
+        Desencripta datos usando AES-GCM, igual que el frontend
+        """
         try:
             if not encrypted_data:
                 return None
                 
-            # Decodificar datos
-            decoded_data = base64.urlsafe_b64decode(encrypted_data.encode())
-            # Extraer sal (primeros 16 bytes)
+            # Decodificar base64
+            decoded_data = base64.b64decode(encrypted_data)
+            
+            # Extraer salt, iv y contenido
             salt = decoded_data[:16]
-            # Extraer datos encriptados
-            encrypted = decoded_data[16:]
+            iv = decoded_data[16:28]
+            content = decoded_data[28:]
             
             # Obtener master key y derivar clave específica
             master_key = self.get_key_for_install(install_timestamp)
             key = self._derive_key(salt, master_key)
             
-            f = Fernet(key)
-            decrypted_data = f.decrypt(encrypted)
+            # Desencriptar usando AES-GCM
+            aesgcm = AESGCM(key)
+            decrypted_data = aesgcm.decrypt(iv, content, None)
+            
             return decrypted_data.decode()
+            
         except Exception as e:
             logger.error(f"Error en desencriptación: {e}")
             logger.error(traceback.format_exc())

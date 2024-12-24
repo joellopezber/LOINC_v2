@@ -119,11 +119,17 @@
 
     <!-- Scripts necesarios -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.min.js"></script>
-    <script src="/static/js/utils/encryption.js" type="module"></script>
-    <script src="/static/js/utils/storage.js" type="module"></script>
-    <script src="/static/js/tests/openai-tester.js" type="module"></script>
+    
+    <!-- Módulo principal -->
+    <script type="module">
+        import { encryption } from '/static/js/utils/encryption.js';
+        import { storage } from '/static/js/utils/storage.js';
+        import { OpenAITester } from '/static/js/tests/openai-tester.js';
 
-    <script>
+        // Hacer disponible globalmente
+        window.encryption = encryption;
+        window.storage = storage;
+
         // Inicializar WebSocket
         window.socket = io('http://localhost:5001', {
             transports: ['websocket'],
@@ -136,6 +142,9 @@
             status.textContent = 'Conectado';
             status.className = 'connected';
             console.log('✅ WebSocket conectado');
+            
+            // Inicializar tester después de la conexión
+            new OpenAITester();
         });
 
         socket.on('connect_error', (error) => {

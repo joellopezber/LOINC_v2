@@ -64,6 +64,73 @@ class WebSocketService:
         def handle_disconnect():
             logger.info("🔌 Cliente desconectado")
             
+        @self.socketio.on('openai.test_search')
+        def handle_test_search(data):
+            """Maneja la solicitud de prueba de búsqueda con OpenAI"""
+            logger.info("🔍 Recibida solicitud de prueba OpenAI")
+            
+            text = data.get('text')
+            encrypted_key = data.get('apiKey')
+            install_timestamp = data.get('installTimestamp')
+            
+            if not all([text, encrypted_key, install_timestamp]):
+                logger.error("❌ Faltan datos requeridos para la prueba")
+                emit('openai.test_result', {
+                    'status': 'error',
+                    'message': 'Se requieren: text, apiKey e installTimestamp'
+                })
+                return
+            
+            try:
+                # Desencriptar API key
+                logger.info("🔐 Desencriptando API key...")
+                api_key = encryption_service.decrypt(encrypted_key, install_timestamp)
+                
+                if not api_key:
+                    logger.error("❌ Error desencriptando API key")
+                    emit('openai.test_result', {
+                        'status': 'error',
+                        'message': 'Error al desencriptar la API key'
+                    })
+                    return
+                
+                # Validar formato de API key
+                if not api_key.startswith('sk-'):
+                    logger.error("❌ API key inválida")
+                    emit('openai.test_result', {
+                        'status': 'error',
+                        'message': 'API key inválida (debe empezar con sk-)'
+                    })
+                    return
+                
+                logger.info("✅ API key desencriptada correctamente")
+                
+                # Almacenar en storage_data para OpenAIService
+                self.storage_data['openaiApiKey'] = encrypted_key
+                self.storage_data['installTimestamp'] = install_timestamp
+                
+                # Inicializar OpenAI service
+                from .openai_service import openai_service
+                if not openai_service.initialize(self):
+                    logger.error("❌ Error inicializando OpenAI service")
+                    emit('openai.test_result', {
+                        'status': 'error',
+                        'message': 'Error inicializando OpenAI service'
+                    })
+                    return
+                
+                # Probar conexión
+                test_result = openai_service.test_connection()
+                emit('openai.test_result', test_result)
+                logger.info("✅ Prueba completada")
+                
+            except Exception as e:
+                logger.error(f"❌ Error en prueba OpenAI: {e}")
+                emit('openai.test_result', {
+                    'status': 'error',
+                    'message': str(e)
+                })
+            
         @self.socketio.on('encryption.get_master_key')
         def handle_get_master_key(data):
             """Maneja la solicitud de obtener la master key"""

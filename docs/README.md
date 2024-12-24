@@ -4,6 +4,42 @@
 
 LOINC Search es una aplicación web diseñada para facilitar la búsqueda y gestión de términos LOINC (Logical Observation Identifiers Names and Codes). El sistema utiliza tecnologías modernas de procesamiento de lenguaje natural e inteligencia artificial para mejorar la precisión y relevancia de las búsquedas.
 
+## Almacenamiento en Backend
+
+### WebSocket Storage
+El backend utiliza un sistema de almacenamiento en memoria a través de la variable `storage_data` en el servicio WebSocket. Esta variable contiene toda la información necesaria para el funcionamiento del sistema:
+
+```python
+self.storage_data = {
+    'searchConfig': {
+        'search': dict,
+        'sql': dict,
+        'elastic': dict,
+        'performance': dict
+    },
+    'openaiApiKey': str | None,
+    'installTimestamp': str | None
+}
+```
+
+#### Características del Storage:
+- **Persistencia**: En memoria durante la sesión del servidor
+- **Acceso**: A través del servicio WebSocket
+- **Seguridad**: API keys almacenadas en formato encriptado
+- **Sincronización**: Automática entre frontend y backend
+
+#### Flujo de Datos:
+1. Frontend almacena configuración en localStorage
+2. WebSocket sincroniza datos con `storage_data`
+3. Servicios del backend acceden a través de WebSocket
+4. Cambios en backend se propagan al frontend
+
+#### Ventajas:
+- Almacenamiento eficiente en memoria
+- No requiere base de datos adicional
+- Sincronización en tiempo real
+- Seguridad mejorada para datos sensibles
+
 ## Características Principales
 
 1. **Búsqueda Inteligente**:
