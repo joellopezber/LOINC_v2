@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test OpenAI Service</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+            margin: 0;
+            padding: 20px;
+            line-height: 1.6;
+            background-color: #f5f7f9;
+            min-height: 100vh;
+        }
+        
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+        }
+
+        h1 {
+            color: #1a1a1a;
+            margin-bottom: 20px;
+            font-weight: 600;
+        }
+
+        .status-section {
+            margin: 20px 0;
+            padding: 15px;
+            border-radius: 8px;
+            background: #f8f9fa;
+        }
+
+        .status-item {
+            display: flex;
+            align-items: center;
+            margin: 10px 0;
+        }
+
+        .status-label {
+            min-width: 150px;
+            font-weight: 500;
+        }
+        
+        pre {
+            background: #f5f5f5;
+            padding: 15px;
+            border-radius: 8px;
+            overflow-x: auto;
+            font-size: 14px;
+            margin: 10px 0;
+        }
+        
+        .success { color: #10B981; }
+        .error { color: #EF4444; }
+        .info { color: #3B82F6; }
+        .warning { color: #F59E0B; }
+
+        #connectionStatus {
+            display: inline-flex;
+            align-items: center;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: 500;
+        }
+
+        #connectionStatus.connected {
+            background-color: #ECFDF5;
+            color: #059669;
+        }
+
+        #connectionStatus.disconnected {
+            background-color: #FEF2F2;
+            color: #DC2626;
+        }
+
+        #connectionStatus::before {
+            content: '';
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+
+        #connectionStatus.connected::before {
+            background-color: #059669;
+        }
+
+        #connectionStatus.disconnected::before {
+            background-color: #DC2626;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Test OpenAI Service</h1>
+        
+        <div class="status-section">
+            <div class="status-item">
+                <span class="status-label">Estado WebSocket:</span>
+                <span id="connectionStatus" class="disconnected">Desconectado</span>
+            </div>
+            <div class="status-item">
+                <span class="status-label">Installation Time:</span>
+                <span id="installTimeDisplay">Cargando...</span>
+            </div>
+        </div>
+
+        <div id="testContainer"></div>
+    </div>
+
+    <!-- Scripts necesarios -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.min.js"></script>
+    <script src="/static/js/utils/encryption.js" type="module"></script>
+    <script src="/static/js/utils/storage.js" type="module"></script>
+    <script src="/static/js/tests/openai-tester.js" type="module"></script>
+
+    <script>
+        // Inicializar WebSocket
+        window.socket = io('http://localhost:5001', {
+            transports: ['websocket'],
+            upgrade: false
+        });
+
+        // Manejar eventos de conexión
+        socket.on('connect', () => {
+            const status = document.getElementById('connectionStatus');
+            status.textContent = 'Conectado';
+            status.className = 'connected';
+            console.log('✅ WebSocket conectado');
+        });
+
+        socket.on('connect_error', (error) => {
+            console.error('❌ Error de conexión:', error);
+            const status = document.getElementById('connectionStatus');
+            status.textContent = 'Error de conexión';
+            status.className = 'disconnected';
+        });
+
+        socket.on('disconnect', () => {
+            console.warn('⚠️ WebSocket desconectado');
+            const status = document.getElementById('connectionStatus');
+            status.textContent = 'Desconectado';
+            status.className = 'disconnected';
+        });
+
+        // Mostrar Installation Time
+        document.addEventListener('DOMContentLoaded', () => {
+            const installTime = localStorage.getItem('installTimestamp') || 'No disponible';
+            document.getElementById('installTimeDisplay').textContent = installTime;
+        });
+    </script>
+</body>
+</html> 

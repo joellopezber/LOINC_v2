@@ -36,6 +36,10 @@ def index():
 def test():
     return render_template('test.html')
 
+@app.route('/tests/test.html')
+def serve_test_page():
+    return send_from_directory('../frontend/static/tests', 'test.html')
+
 if __name__ == '__main__':
     # Solo mostrar mensajes si se ejecuta directamente
     if os.environ.get('FLASK_DEBUG') != '1':
