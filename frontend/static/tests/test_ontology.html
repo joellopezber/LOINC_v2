@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Ontology Service</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+            margin: 0;
+            padding: 20px;
+            line-height: 1.6;
+            background-color: #f5f7f9;
+            min-height: 100vh;
+        }
+        
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+        }
+
+        h1 {
+            color: #1a1a1a;
+            margin-bottom: 20px;
+            font-weight: 600;
+        }
+
+        .status-section {
+            margin: 20px 0;
+            padding: 15px;
+            border-radius: 8px;
+            background: #f8f9fa;
+        }
+
+        .status-item {
+            display: flex;
+            align-items: center;
+            margin: 10px 0;
+        }
+
+        .status-label {
+            min-width: 150px;
+            font-weight: 500;
+        }
+
+        .search-container {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .search-container input {
+            flex: 1;
+            padding: 15px;
+            font-size: 16px;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            transition: border-color 0.3s ease;
+        }
+
+        .search-container input:focus {
+            outline: none;
+            border-color: #3B82F6;
+        }
+
+        .search-container button {
+            padding: 15px 30px;
+            background: #3B82F6;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+        }
+
+        button:hover {
+            opacity: 0.9;
+        }
+
+        .results {
+            margin-top: 20px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            display: none;
+        }
+
+        .results.visible {
+            display: block;
+        }
+
+        .json-viewer {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            border: 1px solid #e5e7eb;
+            font-family: monospace;
+            white-space: pre-wrap;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+
+        .section {
+            margin-bottom: 20px;
+            padding: 15px;
+            background: white;
+            border-radius: 8px;
+            border: 1px solid #e5e7eb;
+        }
+
+        .section-title {
+            font-weight: 600;
+            margin-bottom: 10px;
+            color: #374151;
+        }
+
+        .tag-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .tag {
+            background: #e5e7eb;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+
+        .loinc-code {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 4px 8px;
+            background: #f3f4f6;
+            border-radius: 4px;
+            margin-bottom: 4px;
+        }
+
+        .code {
+            font-weight: 500;
+            color: #3B82F6;
+        }
+
+        .description {
+            color: #6b7280;
+            font-size: 14px;
+        }
+
+        #connectionStatus {
+            display: inline-flex;
+            align-items: center;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: 500;
+        }
+
+        #connectionStatus.connected {
+            background-color: #ECFDF5;
+            color: #059669;
+        }
+
+        #connectionStatus.disconnected {
+            background-color: #FEF2F2;
+            color: #DC2626;
+        }
+
+        #connectionStatus::before {
+            content: '';
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+
+        #connectionStatus.connected::before {
+            background-color: #059669;
+        }
+
+        #connectionStatus.disconnected::before {
+            background-color: #DC2626;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Test Ontology Service</h1>
+        
+        <div class="status-section">
+            <div class="status-item">
+                <span class="status-label">Estado WebSocket:</span>
+                <span id="connectionStatus" class="disconnected">Desconectado</span>
+            </div>
+            <div class="status-item">
+                <span class="status-label">Installation Time:</span>
+                <span id="installTimeDisplay">Cargando...</span>
+            </div>
+        </div>
+
+        <div class="search-container">
+            <input type="text" id="searchText" placeholder="Introduce un término médico..." />
+            <button id="searchButton">Analizar</button>
+        </div>
+
+        <div id="results" class="results">
+            <div id="termSection" class="section">
+                <div class="section-title">Término en inglés</div>
+                <div id="termInEnglish"></div>
+            </div>
+
+            <div id="relatedSection" class="section">
+                <div class="section-title">Términos relacionados</div>
+                <div id="relatedTerms" class="tag-list"></div>
+            </div>
+
+            <div id="testSection" class="section">
+                <div class="section-title">Tipos de pruebas</div>
+                <div id="testTypes" class="tag-list"></div>
+            </div>
+
+            <div id="loincSection" class="section">
+                <div class="section-title">Códigos LOINC</div>
+                <div id="loincCodes"></div>
+            </div>
+
+            <div id="keywordSection" class="section">
+                <div class="section-title">Palabras clave</div>
+                <div id="keywords" class="tag-list"></div>
+            </div>
+
+            <div class="section">
+                <div class="section-title">Respuesta JSON completa</div>
+                <pre id="jsonViewer" class="json-viewer"></pre>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts necesarios -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.min.js"></script>
+    
+    <script>
+        // Inicializar WebSocket
+        window.socket = io('http://localhost:5001', {
+            transports: ['websocket'],
+            upgrade: false
+        });
+
+        // Elementos del DOM
+        const searchInput = document.getElementById('searchText');
+        const searchButton = document.getElementById('searchButton');
+        const results = document.getElementById('results');
+
+        // Funciones de utilidad
+        function showResults() {
+            results.classList.add('visible');
+        }
+
+        function hideResults() {
+            results.classList.remove('visible');
+        }
+
+        function displayTags(container, items) {
+            container.innerHTML = items.map(item => `<span class="tag">${item}</span>`).join('');
+        }
+
+        function displayLoincCodes(container, codes) {
+            if (!codes) return;
+            
+            // Convertir a array si es un objeto
+            const loincArray = Array.isArray(codes) ? codes : Object.values(codes);
+            
+            container.innerHTML = loincArray.map(loinc => {
+                // Extraer solo el código LOINC
+                const code = typeof loinc === 'string' ? loinc : loinc.code;
+                return `<span class="tag">${code}</span>`;
+            }).join('');
+        }
+
+        function displayResults(data) {
+            // Mostrar término en inglés
+            document.getElementById('termInEnglish').textContent = data.term_in_english;
+
+            // Mostrar términos relacionados
+            displayTags(document.getElementById('relatedTerms'), data.related_terms);
+
+            // Mostrar tipos de pruebas
+            displayTags(document.getElementById('testTypes'), data.test_types);
+
+            // Mostrar códigos LOINC
+            displayLoincCodes(document.getElementById('loincCodes'), data.loinc_codes);
+
+            // Mostrar palabras clave
+            displayTags(document.getElementById('keywords'), data.keywords);
+
+            // Mostrar JSON completo
+            document.getElementById('jsonViewer').textContent = JSON.stringify(data, null, 2);
+
+            // Mostrar sección de resultados
+            showResults();
+        }
+
+        // Manejar búsqueda
+        async function handleSearch() {
+            const term = searchInput.value.trim();
+            
+            if (!term) {
+                alert('Por favor, introduce un término para buscar');
+                return;
+            }
+
+            try {
+                searchButton.disabled = true;
+                searchButton.textContent = 'Analizando...';
+                hideResults();
+
+                // Enviar al backend
+                socket.emit('ontology.search', { text: term }, (response) => {
+                    searchButton.disabled = false;
+                    searchButton.textContent = 'Analizar';
+
+                    if (response.status === 'success') {
+                        displayResults(response.response);
+                    } else {
+                        alert(`Error: ${response.message}`);
+                    }
+                });
+
+            } catch (error) {
+                searchButton.disabled = false;
+                searchButton.textContent = 'Analizar';
+                alert(`Error: ${error.message}`);
+            }
+        }
+
+        // Eventos
+        searchButton.addEventListener('click', handleSearch);
+        searchInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                handleSearch();
+            }
+        });
+
+        // Manejar eventos de conexión
+        socket.on('connect', () => {
+            const status = document.getElementById('connectionStatus');
+            status.textContent = 'Conectado';
+            status.className = 'connected';
+            console.log('✅ WebSocket conectado');
+        });
+
+        socket.on('connect_error', (error) => {
+            console.error('❌ Error de conexión:', error);
+            const status = document.getElementById('connectionStatus');
+            status.textContent = 'Error de conexión';
+            status.className = 'disconnected';
+        });
+
+        socket.on('disconnect', () => {
+            console.warn('⚠️ WebSocket desconectado');
+            const status = document.getElementById('connectionStatus');
+            status.textContent = 'Desconectado';
+            status.className = 'disconnected';
+        });
+
+        // Mostrar Installation Time
+        document.addEventListener('DOMContentLoaded', () => {
+            const installTime = localStorage.getItem('installTimestamp') || 'No disponible';
+            document.getElementById('installTimeDisplay').textContent = installTime;
+        });
+    </script>
+</body>
+</html> 

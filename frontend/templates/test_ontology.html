@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Ontology</title>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Roboto', sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        .search-container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        
+        .search-input {
+            width: 100%;
+            padding: 12px;
+            font-size: 16px;
+            border: 2px solid #e0e0e0;
+            border-radius: 4px;
+            transition: border-color 0.3s ease;
+        }
+        
+        .search-input:focus {
+            outline: none;
+            border-color: #2196F3;
+        }
+        
+        .error {
+            color: #f44336;
+            padding: 10px;
+            margin-top: 10px;
+            background: #ffebee;
+            border-radius: 4px;
+            display: none;
+        }
+        
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 20px;
+        }
+        
+        .loading::after {
+            content: '';
+            display: inline-block;
+            width: 30px;
+            height: 30px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #2196F3;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="search-container">
+            <input type="text" 
+                   class="search-input" 
+                   placeholder="Enter a medical term..."
+                   id="searchInput">
+            <div class="error" id="errorDisplay"></div>
+        </div>
+        <div class="loading" id="loadingIndicator"></div>
+        <ontology-results id="results"></ontology-results>
+    </div>
+
+    <script src="/static/js/components/ontology-results.js"></script>
+    <script>
+        const searchInput = document.getElementById('searchInput');
+        const errorDisplay = document.getElementById('errorDisplay');
+        const loadingIndicator = document.getElementById('loadingIndicator');
+        const results = document.getElementById('results');
+        
+        let ws = null;
+        let installTimestamp = Date.now().toString();
+        
+        function showError(message) {
+            errorDisplay.textContent = message;
+            errorDisplay.style.display = 'block';
+            loadingIndicator.style.display = 'none';
+        }
+        
+        function hideError() {
+            errorDisplay.style.display = 'none';
+        }
+        
+        function showLoading() {
+            loadingIndicator.style.display = 'block';
+            hideError();
+        }
+        
+        function hideLoading() {
+            loadingIndicator.style.display = 'none';
+        }
+        
+        function connectWebSocket() {
+            ws = new WebSocket('ws://localhost:5001/ws');
+            
+            ws.onopen = () => {
+                console.log('WebSocket Connected');
+                const openaiApiKey = localStorage.getItem('openaiApiKey');
+                if (openaiApiKey) {
+                    ws.send(JSON.stringify({
+                        type: 'config',
+                        data: {
+                            openaiApiKey,
+                            installTimestamp
+                        }
+                    }));
+                }
+            };
+            
+            ws.onmessage = (event) => {
+                const response = JSON.parse(event.data);
+                hideLoading();
+                
+                if (response.status === 'error') {
+                    showError(response.message);
+                } else {
+                    results.setAttribute('data', JSON.stringify(response.response));
+                }
+            };
+            
+            ws.onclose = () => {
+                console.log('WebSocket Disconnected');
+                setTimeout(connectWebSocket, 1000);
+            };
+            
+            ws.onerror = (error) => {
+                console.error('WebSocket Error:', error);
+                showError('Connection error. Please try again.');
+            };
+        }
+        
+        searchInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                const term = searchInput.value.trim();
+                if (!term) {
+                    showError('Please enter a term to search');
+                    return;
+                }
+                
+                if (!ws || ws.readyState !== WebSocket.OPEN) {
+                    showError('Not connected to server. Please try again.');
+                    return;
+                }
+                
+                showLoading();
+                ws.send(JSON.stringify({
+                    type: 'ontology_search',
+                    data: {
+                        text: term
+                    }
+                }));
+            }
+        });
+        
+        // Initial connection
+        connectWebSocket();
+        
+        // Check for API key
+        window.addEventListener('load', () => {
+            const apiKey = localStorage.getItem('openaiApiKey');
+            if (!apiKey) {
+                const key = prompt('Please enter your OpenAI API key:');
+                if (key) {
+                    localStorage.setItem('openaiApiKey', key);
+                }
+            }
+        });
+    </script>
+</body>
+</html> 

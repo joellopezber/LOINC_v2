@@ -10,6 +10,9 @@ if [ -d ".venv" ]; then
     source .venv/bin/activate
 fi
 
+# Establecer modo desarrollo
+export FLASK_ENV=development
+
 # Verificar si Flask está instalado
 if ! python -c "import flask" &> /dev/null; then
     echo -e "${BLUE}📦 Instalando dependencias...${NC}"
@@ -17,11 +20,10 @@ if ! python -c "import flask" &> /dev/null; then
 fi
 
 # Configurar variables de entorno para Flask
-export FLASK_ENV=production  # Cambiar a production para evitar el reloader
 export FLASK_DEBUG=0
 export PYTHONPATH=$PYTHONPATH:$(pwd)
 
-# Ejecutar directamente el archivo app.py
+# Ejecutar servidor
 python backend/app.py
 
 # Desactivar entorno virtual al salir
