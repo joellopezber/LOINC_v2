@@ -1,4 +1,4 @@
-from flask import Blueprint, send_from_directory, render_template
+from flask import Blueprint, send_from_directory, render_template, jsonify
 import os
 
 # Obtener la ruta base del proyecto
@@ -48,4 +48,12 @@ def serve_js_utils(filename):
 @app_routes.route('/static/js/test/<path:filename>')
 def serve_js_test(filename):
     """Sirve archivos JavaScript de test"""
-    return send_from_directory('../frontend/static/js/test', filename) 
+    return send_from_directory('../frontend/static/js/test', filename)
+
+@app_routes.route('/api/health')
+def health_check():
+    """Endpoint para verificar el estado del servidor"""
+    return jsonify({
+        'status': 'ok',
+        'message': 'Server is running'
+    }) 

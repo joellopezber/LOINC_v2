@@ -82,7 +82,7 @@
         async function checkServices() {
             const serverStatus = document.getElementById('serverStatus');
             try {
-                const response = await fetch('/api/health');
+                const response = await fetch('/tests/api/health');
                 const data = await response.json();
                 console.log('Services status:', data);
                 serverStatus.textContent = 'Conectado';

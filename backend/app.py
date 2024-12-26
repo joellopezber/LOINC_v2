@@ -55,9 +55,7 @@ if __name__ == '__main__':
     if IS_DEVELOPMENT:
         print("\n🚀 Servidor de desarrollo iniciado en http://localhost:5001")
         print("\n📝 Tests disponibles en:")
-        print("   - Tests Index: http://localhost:5001/test")
-        print("   - OpenAI Test: http://localhost:5001/test/openai")
-        print("   - Ontology Test: http://localhost:5001/test/ontology\n")
+        print("   - Tests Index: http://localhost:5001/tests")
         websocket.run()
     else:
         print("🚀 Servidor de producción iniciado")
