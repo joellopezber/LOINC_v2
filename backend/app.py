@@ -3,10 +3,12 @@ import logging
 from flask import Flask
 from flask_cors import CORS
 from services.websocket_service import WebSocketService
+from services.search_service import SearchService
 from tests.test_openai import handle_test_search
 from tests.test_ontology import handle_ontology_search
 from routes.test_routes import test_routes
 from routes.app_routes import app_routes
+from routes.api_routes import api_routes, init_socket_routes
 
 # Configurar logging
 logging.basicConfig(
@@ -35,10 +37,14 @@ websocket = WebSocketService(app)
 
 # Registrar rutas
 app.register_blueprint(app_routes)  # Rutas principales siempre activas
+app.register_blueprint(api_routes)  # Rutas API
 
 # Registrar rutas de test solo en desarrollo
 if IS_DEVELOPMENT:
     app.register_blueprint(test_routes)
+
+# Inicializar rutas de WebSocket
+init_socket_routes(websocket.socketio, websocket.search_service)
 
 # Registrar manejadores de WebSocket
 @websocket.socketio.on('openai.test_search')

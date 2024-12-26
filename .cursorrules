@@ -1,233 +1,264 @@
-# LOINC Search - Reglas y Guías de Desarrollo
+# LOINC Search - Documentación Completa
 
-## Arquitectura General
+## 1. Visión General
+LOINC Search es una aplicación web diseñada para buscar y analizar términos médicos utilizando la base de datos LOINC. La aplicación combina búsqueda en tiempo real, procesamiento de lenguaje natural y una interfaz intuitiva para facilitar la búsqueda de códigos LOINC.
 
-- Frontend: JavaScript vanilla + CSS modular (sin dependencias de Node.js)
-- Backend: Python + Flask
-- Base de datos: SQL + Elasticsearch
-- Integración IA: Prompts predefinidos para OpenAI, Anthropic, Google AI
-- Almacenamiento Local: LocalStorage para configuración y estado
+## 2. Estructura del Proyecto
 
-## Gestión de Configuración
-
-### LocalStorage
-La configuración del sistema se almacena en localStorage con la siguiente estructura:
-
-```javascript
-// Clave: 'searchConfig'
-{
-    search: {
-        ontologyMode: 'multi_match' | 'openai',
-        dbMode: 'sql' | 'elastic',
-        openai: {
-            useOriginalTerm: boolean,
-            useEnglishTerm: boolean,
-            useRelatedTerms: boolean,
-            useTestTypes: boolean,
-            useLoincCodes: boolean,
-            useKeywords: boolean
-        }
-    },
-    elastic: {
-        limits: {
-            maxTotal: number,
-            maxPerKeyword: number
-        },
-        searchTypes: {
-            exact: {
-                enabled: boolean,
-                priority: number
-            },
-            fuzzy: {
-                enabled: boolean,
-                tolerance: number
-            },
-            smart: {
-                enabled: boolean,
-                precision: number
-            }
-        }
-    },
-    sql: {
-        maxTotal: number,
-        maxPerKeyword: number,
-        maxKeywords: number,
-        strictMode: boolean
-    },
-    loinc: {
-        filePath: string,
-        lastUpdate: string
-    },
-    agents: [
-        {
-            id: string,
-            name: string,
-            enabled: boolean,
-            provider: string,
-            model: string,
-            summary: string,
-            promptPath: string
-        }
-    ]
-}
-
-// Clave: 'apiKeys'
-{
-    openai: string,
-    anthropic: string,
-    google: string
-}
-```
-
-### Gestión de Estado
-- Configuración persistente en localStorage
-- API keys almacenadas de forma segura
-- Historial de búsqueda local
-- Preferencias de usuario
-
-## Reglas Principales
-
-### 1. Estructura del Código
-
+### 2.1 Organización de Archivos
 ```
 LOINC_v2/
 ├── frontend/
-│   ├── static/
-│   │   ├── css/
-│   │   │   ├── components/
-│   │   │   └── styles.css
-│   │   └── js/
-│   │       ├── components/
-│   │       ├── services/
-│   │       └── utils/
-│   ├── templates/
-│   │   └── components/
-│   └── docs/
+│   ├── templates/               # Plantillas HTML
+│   │   ├── index.html          # Página principal
+│   │   └── components/         # Componentes HTML
+│   ├── static/                 # Recursos estáticos
+│   │   ├── css/               # Estilos
+│   │   └── js/                # JavaScript
+│   │       ├── components/    # Componentes JS
+│   │       ├── services/      # Servicios
+│   │       ├── utils/         # Utilidades
+│   │       └── config/        # Configuraciones
+│   └── tests/                 # Tests frontend
 ├── backend/
-│   ├── api/
-│   ├── core/
-│   ├── processing/
-│   ├── routes/
-│   ├── utils/
-│   ├── prompts/
-│   │   ├── search/
-│   │   └── analysis/
-│   └── docs/
-├── config/
-├── data/
-└── tests/
+│   ├── routes/                # Rutas API
+│   ├── services/              # Servicios backend
+│   ├── tests/                 # Tests backend
+│   └── app.py                 # Aplicación Flask
+├── docs/                      # Documentación
+└── .env                       # Variables de entorno
 ```
 
-### 2. Estándares de Código
+### 2.2 Componentes Principales
+1. **Frontend**:
+   - Interfaz de usuario moderna
+   - Componentes modulares
+   - Servicios de comunicación
+   - Sistema de configuración
 
-Frontend:
-- Usar ES6+ features
-- Componentes modulares
-- BEM para CSS
-- Nombres en español (camelCase)
-- Usar Google Material Design
+2. **Backend**:
+   - API REST con Flask
+   - WebSocket para tiempo real
+   - Servicios de procesamiento
+   - Sistema de encriptación
 
-Backend:
-- PEP 8
-- Type hints
-- Docstrings obligatorios
-- Nombres en inglés (snake_case)
+3. **Base de Datos**:
+   - SQL para datos estructurados
+   - Elasticsearch para búsqueda
+   - Caché para rendimiento
 
-### 3. Flujo de Trabajo
+## 3. Arquitectura del Sistema
 
-1. Crear rama feature/bugfix
-2. Seguir guías de estilo
-3. Documentar cambios
-4. Testing local
-5. Pull Request
+### 3.1 Frontend
 
-### 4. Documentación
+#### Componentes Visuales
+- **Header**: Barra superior con configuración
+- **Logo**: Diseño estilizado "LOO,INC"
+- **Barra de Búsqueda**: Campo y botones
+- **Footer**: Información de versión
 
-Documentación completa disponible en:
-- Frontend: `/frontend/docs/FRONTEND.md`
-- Backend: `/backend/docs/BACKEND.md`
-- General: `/docs/README.md`
+#### Servicios Core
+1. **WebSocket Service**:
+   - Comunicación en tiempo real
+   - Reconexión automática
+   - Gestión de eventos
+   - Control de errores
 
-### 5. Reglas de Commit
+2. **Storage Service**:
+   - Almacenamiento local
+   - Sincronización
+   - Caché y validación
+   - Control de estado
 
-- Commits en español
-- Formato: `tipo(alcance): descripción`
-- Tipos: feat, fix, docs, style, refactor, test, chore
+3. **Config Service**:
+   - Gestión de configuración
+   - Validación de datos
+   - Persistencia y sincronización
 
-### 6. Testing
+### 3.2 Backend
 
-- Frontend: Tests manuales UI
-- Backend: pytest
-- Coverage mínimo: 80%
+#### Servicios Principales
+1. **Ontology Service**:
+   - Procesamiento de términos
+   - Integración OpenAI
+   - Análisis semántico
+   - Gestión multilenguaje
 
-### 7. Configuración
+2. **OpenAI Service**:
+   - Gestión de API keys
+   - Procesamiento de consultas
+   - Control de modelos
+   - Manejo de errores
 
-- Usar variables de entorno
-- No hardcodear credenciales
-- Configuración en archivos JSON/YAML
-- Persistencia en localStorage
+3. **Encryption Service**:
+   - Encriptación AES-GCM
+   - Gestión de claves
+   - Protección de datos
+   - Validación segura
 
-### 8. Seguridad
+#### Sistema de Rutas
+1. **Rutas Estáticas**:
+   - Servir archivos CSS
+   - Servir archivos JavaScript
+   - Servir componentes
+   - Servir utilidades
 
-- Sanitizar inputs
-- Validar tipos
-- Manejar errores
-- Rotar API keys
-- Encriptar datos sensibles en localStorage
+2. **API Endpoints**:
+   - Verificación de estado
+   - Gestión de configuración
+   - Procesamiento de búsquedas
+   - Manejo de errores
 
-## Normas Importantes
+### 3.3 Base de Datos
 
-1. **Modularidad**:
-   - Un componente, una responsabilidad
-   - Separar lógica de presentación
-   - Reutilizar código común
+#### SQL
+- Almacenamiento estructurado
+- Relaciones y consultas
+- Optimización de rendimiento
+- Control de integridad
 
-2. **Performance**:
-   - Optimizar queries
+#### Elasticsearch
+- Búsqueda avanzada
+- Indexación eficiente
+- Búsqueda fuzzy
+- Análisis de texto
+
+## 4. Funcionalidades Core
+
+### 4.1 Búsqueda y Análisis
+1. **Procesamiento de Términos**:
+   - Traducción automática
+   - Análisis semántico
+   - Extracción de keywords
+   - Mapeo LOINC
+
+2. **Resultados**:
+   - Términos relacionados
+   - Códigos LOINC
+   - Tipos de pruebas
+   - Palabras clave
+
+### 4.2 Configuración del Sistema
+1. **Opciones de Búsqueda**:
+   - Modo de búsqueda
+   - Base de datos
+   - Parámetros OpenAI
+   - Límites y filtros
+
+2. **Gestión de API Keys**:
+   - Almacenamiento seguro
+   - Validación
+   - Encriptación
+   - Sincronización
+
+## 5. Seguridad y Rendimiento
+
+### 5.1 Seguridad
+1. **Encriptación**:
+   - AES-GCM simétrico
+   - Derivación de claves
+   - Salt único
+   - Logging seguro
+
+2. **Validación**:
+   - Sanitización de entrada
+   - Control de acceso
+   - Protección de datos
+   - Manejo de errores
+
+### 5.2 Rendimiento
+1. **Caché**:
+   - Almacenamiento local
+   - Timeout configurable
+   - Sincronización
+   - Limpieza automática
+
+2. **Optimización**:
    - Lazy loading
-   - Caché cuando sea posible
-   - Gestión eficiente del localStorage
+   - Compresión
+   - Minificación
+   - Bundling
 
-3. **Mantenibilidad**:
-   - Código autodocumentado
-   - Logging consistente
-   - Manejo de errores robusto
-   - Validación de datos en localStorage
+## 6. Testing y Calidad
 
-4. **Accesibilidad**:
-   - Diseño responsive
-   - ARIA labels
-   - Soporte de teclado
+### 6.1 Pruebas Automatizadas
+1. **Frontend**:
+   - Tests de componentes
+   - Tests de servicios
+   - Tests de integración
+   - Tests E2E
 
-## Servicios y Utilidades
+2. **Backend**:
+   - Tests unitarios
+   - Tests de API
+   - Tests de servicios
+   - Tests de seguridad
 
-### Storage Service (storage.js)
-- Gestión centralizada del localStorage
-- Métodos para CRUD de configuración
-- Manejo de API keys
-- Historial de búsqueda
+### 6.2 Monitoreo
+1. **Logging**:
+   - Nivel DEBUG
+   - Formato detallado
+   - Rotación de logs
+   - Alertas
 
-### Config Modal (config-modal.js)
-- Interfaz de configuración
-- Persistencia automática
-- Validación de datos
-- Gestión de agentes
+2. **Métricas**:
+   - Tiempos de respuesta
+   - Uso de recursos
+   - Errores y excepciones
+   - Performance
 
-## Herramientas Recomendadas
+## 7. Guías de Desarrollo
 
-- VS Code con ESLint
-- Python: flake8, black
-- Git hooks para linting
-- Chrome DevTools
-- Redux DevTools para depuración de estado
+### 7.1 Estándares
+1. **Frontend**:
+   - ES6+
+   - BEM CSS
+   - Material Design
+   - Componentes modulares
 
-## Contacto
+2. **Backend**:
+   - PEP 8
+   - Type hints
+   - Docstrings
+   - Clean code
 
-Para dudas o sugerencias:
-- Documentación Wiki
-- Issues en GitHub
-- Email del equipo
+### 7.2 Flujo de Trabajo
+1. **Desarrollo**:
+   - Crear rama feature/bugfix
+   - Seguir guías de estilo
+   - Documentar cambios
+   - Testing local
 
-## Nota
+2. **Integración**:
+   - Pull Request
+   - Code review
+   - CI/CD
+   - Deploy
 
-Este archivo es una guía rápida. Para información detallada, consultar la documentación completa en `/docs/README.md`. 
+## 8. Mantenimiento
+
+### 8.1 Actualizaciones
+1. **Dependencias**:
+   - Versiones compatibles
+   - Security patches
+   - Breaking changes
+   - Migración de datos
+
+2. **Documentación**:
+   - Guías actualizadas
+   - Cambios documentados
+   - Ejemplos de uso
+   - Troubleshooting
+
+### 8.2 Soporte
+1. **Issues**:
+   - Bug tracking
+   - Feature requests
+   - Documentación
+   - Soporte técnico
+
+2. **Comunidad**:
+   - Contribuciones
+   - Feedback
+   - Mejoras
+   - Plugins 

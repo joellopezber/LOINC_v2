@@ -4,78 +4,24 @@
 
 LOINC Search es una aplicación web diseñada para facilitar la búsqueda y gestión de términos LOINC (Logical Observation Identifiers Names and Codes). El sistema utiliza tecnologías modernas de procesamiento de lenguaje natural e inteligencia artificial para mejorar la precisión y relevancia de las búsquedas.
 
-## Almacenamiento en Backend
+## Documentación
 
-### WebSocket Storage
-El backend utiliza un sistema de almacenamiento en memoria a través de la variable `storage_data` en el servicio WebSocket. Esta variable contiene toda la información necesaria para el funcionamiento del sistema:
+La documentación completa del proyecto se encuentra en el archivo `LOINC_SEARCH.md`, que incluye:
 
-```python
-self.storage_data = {
-    'searchConfig': {
-        'search': dict,
-        'sql': dict,
-        'elastic': dict,
-        'performance': dict
-    },
-    'openaiApiKey': str | None,
-    'installTimestamp': str | None
-}
-```
-
-#### Características del Storage:
-- **Persistencia**: En memoria durante la sesión del servidor
-- **Acceso**: A través del servicio WebSocket
-- **Seguridad**: API keys almacenadas en formato encriptado
-- **Sincronización**: Automática entre frontend y backend
-
-#### Flujo de Datos:
-1. Frontend almacena configuración en localStorage
-2. WebSocket sincroniza datos con `storage_data`
-3. Servicios del backend acceden a través de WebSocket
-4. Cambios en backend se propagan al frontend
-
-#### Ventajas:
-- Almacenamiento eficiente en memoria
-- No requiere base de datos adicional
-- Sincronización en tiempo real
-- Seguridad mejorada para datos sensibles
-
-## Características Principales
-
-1. **Búsqueda Inteligente**:
-   - Procesamiento ontológico
-   - Análisis semántico
-   - Múltiples motores de búsqueda (SQL/Elasticsearch)
-
-2. **Integración con IA**:
-   - OpenAI
-   - Anthropic
-   - Google AI
-
-3. **Gestión de Datos**:
-   - Importación de archivos LOINC
-   - Gestión de ontologías
-   - Configuración flexible
-
-## Arquitectura del Sistema
-
-### Frontend (JavaScript + CSS)
-- Interfaz de usuario moderna y responsiva
-- Gestión de estado local
-- Componentes modulares
-- [Documentación Frontend](frontend/docs/FRONTEND.md)
-
-### Backend (Python + Flask)
-- API REST
-- Procesamiento de datos
-- Integración con servicios de IA
-- [Documentación Backend](backend/docs/BACKEND.md)
+1. **Visión General**: Descripción y objetivos del proyecto
+2. **Estructura**: Organización de archivos y componentes
+3. **Arquitectura**: Frontend, Backend y Base de datos
+4. **Funcionalidades**: Búsqueda, análisis y configuración
+5. **Seguridad**: Encriptación y validación
+6. **Testing**: Pruebas y calidad
+7. **Desarrollo**: Guías y estándares
+8. **Mantenimiento**: Actualizaciones y soporte
 
 ## Requisitos del Sistema
 
 ### Software
 - Python 3.8+
-- Node.js 14+
+- Flask
 - Elasticsearch 7.x
 - MySQL/PostgreSQL
 
@@ -101,13 +47,7 @@ self.storage_data = {
    pip install -r requirements.txt
    ```
 
-3. **Frontend**:
-   ```bash
-   cd frontend
-   # No requiere instalación adicional
-   ```
-
-4. **Configuración**:
+3. **Configuración**:
    - Copiar `.env.example` a `.env`
    - Configurar variables de entorno
    - Configurar conexiones a bases de datos
@@ -120,119 +60,52 @@ self.storage_data = {
    ```
 
 2. **Acceder a la Aplicación**:
-   - Abrir navegador en `http://localhost:5000`
+   - Abrir navegador en `http://localhost:5001`
    - Configurar opciones iniciales
    - Comenzar a usar
 
-## Configuración
+3. **API Endpoints**:
+   ```bash
+   # Verificar estado
+   GET /api/health
 
-### Archivo de Configuración
-```json
-{
-    "search": {
-        "ontologyMode": "multi_match",
-        "dbMode": "sql"
-    },
-    "elastic": {
-        // Configuración Elasticsearch
-    },
-    "sql": {
-        // Configuración SQL
-    }
-}
-```
+   # Búsqueda LOINC
+   GET /api/loinc/search?q=glucose&limit=10
 
-### Variables de Entorno
-```env
-FLASK_ENV=development
-OPENAI_API_KEY=sk-...
-DB_CONNECTION=...
-```
+   # Inserción masiva
+   POST /api/loinc/bulk
+   Content-Type: application/json
+   Body: [{"code": "1234-5", ...}, ...]
+   ```
 
 ## Desarrollo
 
-### Estructura del Proyecto
-```
-LOINC_v2/
-├── frontend/
-│   ├── static/
-│   │   ├── css/
-│   │   └── js/
-│   └── templates/
-├── backend/
-│   ├── api/
-│   ├── core/
-│   └── processing/
-├── config/
-├── data/
-└── tests/
-```
+### Flujo de Trabajo
+1. Crear rama feature/bugfix
+2. Seguir guías de estilo
+3. Documentar cambios
+4. Testing local
+5. Pull Request
 
-### Flujo de Desarrollo
-
-1. **Feature Branch**:
-   ```bash
-   git checkout -b feature/nueva-funcionalidad
-   ```
-
-2. **Desarrollo**:
-   - Seguir guías de estilo
-   - Documentar cambios
-   - Añadir tests
-
-3. **Testing**:
-   ```bash
-   python -m pytest
-   ```
-
-4. **Pull Request**:
-   - Descripción clara
-   - Referencias a issues
-   - Revisión de código
-
-## Testing
-
-### Backend
+### Testing
 ```bash
-python -m pytest tests/
+# Backend
+python -m pytest
+
+# Frontend
+# Tests manuales de UI
 ```
-
-### Frontend
-- Tests manuales de UI
-- Validación de responsive design
-- Pruebas de integración
-
-## Deployment
-
-1. **Preparación**:
-   - Actualizar dependencias
-   - Ejecutar tests
-   - Build de assets
-
-2. **Deployment**:
-   - Configurar servidor
-   - Migrar base de datos
-   - Deploy aplicación
-
-3. **Verificación**:
-   - Pruebas de smoke
-   - Monitoreo inicial
-   - Validación de funcionalidad
 
 ## Mantenimiento
 
 ### Logs
-- `/var/log/loinc/app.log`
-- `/var/log/loinc/error.log`
-
-### Backups
-- Base de datos: Diario
-- Configuración: Por cambio
-- Ontología: Semanal
+- Nivel DEBUG para desarrollo
+- Rotación de logs configurada
+- Alertas automatizadas
 
 ### Monitoreo
-- Uso de CPU/RAM
 - Tiempos de respuesta
+- Uso de recursos
 - Errores y excepciones
 
 ## Contribución
@@ -245,11 +118,11 @@ python -m pytest tests/
 
 ## Licencia
 
-Este proyecto está bajo la licencia [LICENCIA].
+Este proyecto está bajo la licencia MIT.
 
-## Contacto
+## Soporte
 
-Para soporte o consultas:
-- Email: [EMAIL]
-- Issues: GitHub Issues
-- Documentación: Wiki del proyecto 
+Para soporte y consultas:
+- Issues en GitHub
+- Documentación en `LOINC_SEARCH.md`
+- Email: [EMAIL] 

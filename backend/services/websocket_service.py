@@ -30,6 +30,12 @@ class WebSocketService:
         }
         # Almacenar último valor para comparar cambios
         self.last_values = {}
+        
+        # Inicializar SearchService
+        from .search_service import SearchService
+        self.search_service = SearchService(self)
+        
+        # Configurar handlers
         self._setup_handlers()
             
     def _has_value_changed(self, key: str, new_value: Any) -> bool:
@@ -189,9 +195,14 @@ class WebSocketService:
                 # Log del valor recibido
                 self._log_value_update(key, value, request_id)
                 
-                # Actualizar cache local
-                self.storage_data[key] = value
+                # Actualizar cache local - guardar el valor directamente
+                if key == 'searchConfig':
+                    self.storage_data[key] = value.get('value', value)
+                else:
+                    self.storage_data[key] = value
+                    
                 logger.info(f"💾 Almacenado: {key}")
+                logger.debug(f"📦 Valor almacenado: {json.dumps(self.storage_data[key], indent=2)}")
                 
                 # Confirmar al cliente original
                 emit('storage.value_set', {

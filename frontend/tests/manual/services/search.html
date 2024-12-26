@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Search Service</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="../css/test-styles.css">
+</head>
+<body>
+    <div class="container">
+        <a href="/tests/index_test.html" class="back-link">← Volver a Tests</a>
+        <h1>Test Search Service</h1>
+        
+        <div class="status-section">
+            <div class="status-item">
+                <span class="status-label">Estado WebSocket:</span>
+                <span id="connectionStatus" class="disconnected">Desconectado</span>
+            </div>
+            <div class="status-item">
+                <span class="status-label">Installation Time:</span>
+                <span id="installTimeDisplay">Cargando...</span>
+            </div>
+        </div>
+
+        <div class="config-section">
+            <div class="config-title">Servicio de Búsqueda</div>
+            <div class="config-options">
+                <div class="service-option active" data-service="elastic">Elasticsearch</div>
+                <div class="service-option" data-service="sql">SQLite</div>
+            </div>
+        </div>
+
+        <div class="search-container">
+            <input type="text" id="searchInput" class="input" placeholder="Introduce un término LOINC..." />
+            <button id="searchButton" class="button">Buscar</button>
+        </div>
+
+        <div id="results" class="results">
+            <div id="resultsList"></div>
+            
+            <div class="section">
+                <div class="section-title">Respuesta JSON completa</div>
+                <pre id="jsonViewer" class="json-viewer"></pre>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.min.js"></script>
+    <script type="module">
+        import { SearchTester } from '../js/testers/search-tester.js';
+
+        // Referencias DOM
+        const searchInput = document.getElementById('searchInput');
+        const searchButton = document.getElementById('searchButton');
+        const resultsContainer = document.getElementById('results');
+        const resultsList = document.getElementById('resultsList');
+        const connectionStatus = document.getElementById('connectionStatus');
+        const serviceOptions = document.querySelectorAll('.service-option');
+
+        // Inicializar Search Tester
+        const tester = new SearchTester();
+
+        // Configurar callbacks
+        tester.onConnectionChange = (isConnected) => {
+            connectionStatus.className = isConnected ? 'connected' : 'disconnected';
+            connectionStatus.textContent = isConnected ? 'Conectado' : 'Desconectado';
+            searchInput.disabled = !isConnected;
+            searchButton.disabled = !isConnected;
+        };
+
+        tester.onSearchResult = (results) => {
+            displayResults(results);
+        };
+
+        tester.onError = (error) => {
+            displayError(error.message);
+        };
+
+        // Función para mostrar resultados
+        function displayResults(data) {
+            resultsContainer.classList.add('visible');
+            console.log('Datos recibidos:', data);
+
+            if (!data || !data.response || !data.response.results) {
+                displayError('Respuesta inválida del servidor');
+                return;
+            }
+
+            const { results } = data.response;
+            
+            // Mostrar resultados
+            resultsList.innerHTML = results.map(result => `
+                <div class="result-item">
+                    <div class="result-code">${result.loinc_num || 'Sin código'}</div>
+                    <div class="result-description">${result.component} - ${result.system}</div>
+                </div>
+            `).join('');
+
+            // Mostrar JSON completo
+            document.getElementById('jsonViewer').textContent = 
+                JSON.stringify(data, null, 2);
+        }
+
+        // Función para mostrar errores
+        function displayError(message) {
+            resultsContainer.classList.add('visible');
+            resultsContainer.innerHTML = `<div class="error">${message}</div>`;
+        }
+
+        // Manejar búsqueda
+        async function handleSearch() {
+            const query = searchInput.value.trim();
+            if (!query) return;
+
+            try {
+                searchInput.disabled = true;
+                searchButton.disabled = true;
+                resultsContainer.classList.remove('visible');
+
+                await tester.search(query);
+            } catch (error) {
+                console.error('Error al buscar:', error);
+                displayError(error.message);
+            } finally {
+                searchInput.disabled = false;
+                searchButton.disabled = false;
+            }
+        }
+
+        // Manejar cambio de servicio
+        serviceOptions.forEach(option => {
+            option.addEventListener('click', () => {
+                serviceOptions.forEach(opt => opt.classList.remove('active'));
+                option.classList.add('active');
+                tester.setPreferredService(option.dataset.service);
+            });
+        });
+
+        // Event listeners
+        searchButton.addEventListener('click', handleSearch);
+        searchInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                handleSearch();
+            }
+        });
+
+        // Conectar al iniciar
+        document.addEventListener('DOMContentLoaded', () => {
+            console.log('🚀 Iniciando aplicación...');
+            const installTime = localStorage.getItem('installTimestamp') || 'No disponible';
+            document.getElementById('installTimeDisplay').textContent = installTime;
+            console.log('⏰ Installation Time:', installTime);
+            tester.connect();
+        });
+    </script>
+</body>
+</html> 

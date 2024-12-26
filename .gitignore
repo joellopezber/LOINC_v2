@@ -41,4 +41,7 @@ data/temp/*
 !data/temp/.gitkeep
 *.log
 .coverage
-htmlcov/ 
+htmlcov/
+
+# Documentación generada
+docs/LOINC_SEARCH.md 
