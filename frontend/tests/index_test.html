@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LOINC Tests</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="manual/css/test-styles.css">
+</head>
+<body>
+    <div class="container">
+        <h1>LOINC Search - Test Suite</h1>
+
+        <div class="test-section">
+            <h2>Tests Manuales</h2>
+            <div class="test-list">
+                <a href="manual/services/openai.html" class="test-link">
+                    <div class="test-card">
+                        <div class="test-info">
+                            <div class="test-title">Test OpenAI Service</div>
+                            <div class="test-description">Prueba el servicio de OpenAI para procesamiento de texto y análisis médico</div>
+                        </div>
+                        <button class="button">Probar</button>
+                    </div>
+                </a>
+                <a href="manual/services/ontology.html" class="test-link">
+                    <div class="test-card">
+                        <div class="test-info">
+                            <div class="test-title">Test Ontology Service</div>
+                            <div class="test-description">Prueba el servicio de ontología para búsqueda y análisis de términos médicos</div>
+                        </div>
+                        <button class="button">Probar</button>
+                    </div>
+                </a>
+            </div>
+        </div>
+
+        <div class="test-section">
+            <h2>Tests Unitarios</h2>
+            <div class="test-list">
+                <a href="unit/index.html" class="test-link">
+                    <div class="test-card">
+                        <div class="test-info">
+                            <div class="test-title">Tests Unitarios</div>
+                            <div class="test-description">Ejecuta los tests unitarios de los servicios y utilidades</div>
+                        </div>
+                        <button class="button">Ver Tests</button>
+                    </div>
+                </a>
+            </div>
+        </div>
+
+        <div class="test-section">
+            <h2>Tests de Rendimiento</h2>
+            <div class="test-list">
+                <a href="performance/index.html" class="test-link">
+                    <div class="test-card">
+                        <div class="test-info">
+                            <div class="test-title">Test de Rendimiento</div>
+                            <div class="test-description">Evalúa el rendimiento y la velocidad de los servicios</div>
+                        </div>
+                        <button class="button">Probar</button>
+                    </div>
+                </a>
+            </div>
+        </div>
+
+        <div class="status-section">
+            <div class="status-item">
+                <span class="status-label">Estado del Servidor:</span>
+                <span id="serverStatus" class="disconnected">Verificando...</span>
+            </div>
+            <div class="status-item">
+                <span class="status-label">Installation Time:</span>
+                <span id="installTimeDisplay">Cargando...</span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Verificar que los servicios estén funcionando
+        async function checkServices() {
+            const serverStatus = document.getElementById('serverStatus');
+            try {
+                const response = await fetch('/api/health');
+                const data = await response.json();
+                console.log('Services status:', data);
+                serverStatus.textContent = 'Conectado';
+                serverStatus.className = 'connected';
+            } catch (error) {
+                console.error('Error checking services:', error);
+                serverStatus.textContent = 'Desconectado';
+                serverStatus.className = 'disconnected';
+            }
+        }
+
+        // Mostrar Installation Time
+        document.addEventListener('DOMContentLoaded', () => {
+            const installTime = localStorage.getItem('installTimestamp') || 'No disponible';
+            document.getElementById('installTimeDisplay').textContent = installTime;
+            checkServices();
+        });
+    </script>
+</body>
+</html> 

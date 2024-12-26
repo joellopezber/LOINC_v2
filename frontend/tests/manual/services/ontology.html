@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Ontology Service</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="../css/test-styles.css">
+    <style>
+        /* Estilos específicos para ontología */
+        .search-container {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .results {
+            margin-top: 20px;
+            padding: 20px;
+            background: var(--color-background);
+            border-radius: var(--radius-md);
+            display: none;
+        }
+
+        .results.visible {
+            display: block;
+        }
+
+        .section {
+            margin-bottom: 20px;
+            padding: 15px;
+            background: var(--color-surface);
+            border-radius: var(--radius-md);
+            border: 1px solid var(--color-border);
+        }
+
+        .section-title {
+            font-weight: 600;
+            margin-bottom: 10px;
+            color: var(--color-text);
+        }
+
+        .tag-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .tag {
+            background: var(--color-background);
+            padding: 4px 8px;
+            border-radius: var(--radius-sm);
+            font-size: 14px;
+        }
+
+        .loinc-code {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 4px 8px;
+            background: var(--color-background);
+            border-radius: var(--radius-sm);
+            margin-bottom: 4px;
+        }
+
+        .code {
+            font-weight: 500;
+            color: var(--color-primary);
+        }
+
+        .description {
+            color: var(--color-text-secondary);
+            font-size: 14px;
+        }
+
+        .json-viewer {
+            background: var(--color-surface);
+            padding: 15px;
+            border-radius: var(--radius-md);
+            border: 1px solid var(--color-border);
+            font-family: monospace;
+            white-space: pre-wrap;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <a href="/tests/index_test.html" class="back-link">← Volver a Tests</a>
+        <h1>Test Ontology Service</h1>
+        
+        <div class="status-section">
+            <div class="status-item">
+                <span class="status-label">Estado WebSocket:</span>
+                <span id="connectionStatus" class="disconnected">Desconectado</span>
+            </div>
+            <div class="status-item">
+                <span class="status-label">Installation Time:</span>
+                <span id="installTimeDisplay">Cargando...</span>
+            </div>
+        </div>
+
+        <div class="search-container">
+            <input type="text" id="searchInput" class="input" placeholder="Introduce un término médico..." />
+            <button id="searchButton" class="button">Analizar</button>
+        </div>
+
+        <div id="results" class="results">
+            <div id="termSection" class="section">
+                <div class="section-title">Término en inglés</div>
+                <div id="termInEnglish"></div>
+            </div>
+
+            <div id="relatedSection" class="section">
+                <div class="section-title">Términos relacionados</div>
+                <div id="relatedTerms" class="tag-list"></div>
+            </div>
+
+            <div id="testSection" class="section">
+                <div class="section-title">Tipos de pruebas</div>
+                <div id="testTypes" class="tag-list"></div>
+            </div>
+
+            <div id="loincSection" class="section">
+                <div class="section-title">Códigos LOINC</div>
+                <div id="loincCodes"></div>
+            </div>
+
+            <div id="keywordSection" class="section">
+                <div class="section-title">Palabras clave</div>
+                <div id="keywords" class="tag-list"></div>
+            </div>
+
+            <div class="section">
+                <div class="section-title">Respuesta JSON completa</div>
+                <pre id="jsonViewer" class="json-viewer"></pre>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts necesarios -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.min.js"></script>
+    <script type="module">
+        import { OntologyTester } from '../js/testers/ontology-tester.js';
+
+        // Referencias DOM
+        const searchInput = document.getElementById('searchInput');
+        const searchButton = document.getElementById('searchButton');
+        const resultsContainer = document.getElementById('results');
+        const connectionStatus = document.getElementById('connectionStatus');
+
+        // Inicializar Ontology Tester
+        const tester = new OntologyTester();
+
+        // Configurar callbacks
+        tester.onConnectionChange = (isConnected) => {
+            connectionStatus.className = isConnected ? 'connected' : 'disconnected';
+            connectionStatus.textContent = isConnected ? 'Conectado' : 'Desconectado';
+            searchInput.disabled = !isConnected;
+            searchButton.disabled = !isConnected;
+        };
+
+        tester.onSearchResult = (results) => {
+            displayResults(results);
+        };
+
+        tester.onError = (error) => {
+            displayError(error.message);
+        };
+
+        // Función para mostrar resultados
+        function displayResults(data) {
+            resultsContainer.classList.add('visible');
+            console.log('Datos recibidos:', data);
+
+            if (!data || !data.response) {
+                displayError('Respuesta inválida del servidor');
+                return;
+            }
+
+            const {
+                term_in_english = data.query || '',
+                related_terms = [],
+                test_types = [],
+                loinc_codes = {},
+                keywords = []
+            } = data.response;
+
+            // Mostrar término en inglés
+            document.getElementById('termInEnglish').textContent = term_in_english;
+
+            // Mostrar términos relacionados
+            const relatedTerms = document.getElementById('relatedTerms');
+            relatedTerms.innerHTML = related_terms.map(term => 
+                `<span class="tag">${term}</span>`
+            ).join('');
+
+            // Mostrar tipos de pruebas
+            const testTypes = document.getElementById('testTypes');
+            testTypes.innerHTML = test_types.map(type => 
+                `<span class="tag">${type}</span>`
+            ).join('');
+
+            // Mostrar códigos LOINC
+            const loincCodes = document.getElementById('loincCodes');
+            const loincArray = Object.values(loinc_codes).map(code => ({
+                code: code.code,
+                description: `${code.component} - ${code.system}`
+            }));
+            loincCodes.innerHTML = loincArray.map(code => 
+                `<div class="loinc-code">
+                    <span class="code">${code.code}</span>
+                    <span class="description">${code.description}</span>
+                </div>`
+            ).join('');
+
+            // Mostrar palabras clave
+            const keywordsElement = document.getElementById('keywords');
+            keywordsElement.innerHTML = keywords.map(keyword => 
+                `<span class="tag">${keyword}</span>`
+            ).join('');
+
+            // Mostrar JSON completo
+            document.getElementById('jsonViewer').textContent = 
+                JSON.stringify(data, null, 2);
+        }
+
+        // Función para mostrar errores
+        function displayError(message) {
+            resultsContainer.classList.add('visible');
+            resultsContainer.innerHTML = `<div class="error">${message}</div>`;
+        }
+
+        // Manejar búsqueda
+        async function handleSearch() {
+            const query = searchInput.value.trim();
+            if (!query) return;
+
+            try {
+                searchInput.disabled = true;
+                searchButton.disabled = true;
+                resultsContainer.classList.remove('visible');
+
+                await tester.search(query);
+            } catch (error) {
+                console.error('Error al buscar:', error);
+                displayError(error.message);
+            } finally {
+                searchInput.disabled = false;
+                searchButton.disabled = false;
+            }
+        }
+
+        // Event listeners
+        searchButton.addEventListener('click', handleSearch);
+        searchInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                handleSearch();
+            }
+        });
+
+        // Conectar al iniciar
+        document.addEventListener('DOMContentLoaded', () => {
+            console.log('🚀 Iniciando aplicación...');
+            const installTime = localStorage.getItem('installTimestamp') || 'No disponible';
+            document.getElementById('installTimeDisplay').textContent = installTime;
+            console.log('⏰ Installation Time:', installTime);
+            tester.connect();
+        });
+    </script>
+</body>
+</html> 

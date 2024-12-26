@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LOINC Tests Unitarios</title>
+    <!-- Mocha CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/mocha/mocha.css" />
+</head>
+<body>
+    <div id="mocha"></div>
+
+    <!-- Test dependencies -->
+    <script src="https://unpkg.com/chai/chai.js"></script>
+    <script src="https://unpkg.com/mocha/mocha.js"></script>
+
+    <!-- Initialize Mocha -->
+    <script>
+        mocha.setup('bdd');
+        const expect = chai.expect;
+    </script>
+
+    <!-- Test files -->
+    <script type="module" src="services/storage.test.js"></script>
+    <script type="module" src="services/openai.test.js"></script>
+    <script type="module" src="utils/encryption.test.js"></script>
+
+    <!-- Run tests -->
+    <script type="module">
+        mocha.checkLeaks();
+        mocha.run();
+    </script>
+</body>
+</html> 
