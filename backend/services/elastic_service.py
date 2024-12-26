@@ -5,31 +5,34 @@ import logging
 logger = logging.getLogger(__name__)
 
 class ElasticService:
+    _instance = None
+
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super(ElasticService, cls).__new__(cls)
+        return cls._instance
+
     def __init__(self):
-        """Inicializa el servicio de Elasticsearch"""
-        try:
-            # Configuración por defecto
-            host = 'localhost'
-            port = 9200
+        """Inicializa el servicio de Elasticsearch de forma lazy"""
+        if hasattr(self, 'initialized'):
+            return
             
-            logger.info(f"🔌 Conectando a Elasticsearch en {host}:{port}")
-            
-            # Nueva forma de inicializar el cliente
-            self.client = Elasticsearch(
-                hosts=[f"http://{host}:{port}"],
-                request_timeout=30,
-                retry_on_timeout=True,
-                max_retries=3
-            )
-            
-            if self.client.ping():
+        logger.info("🔌 Inicializando ElasticService")
+        self._client = None
+        self.initialized = True
+        logger.info("✅ ElasticService base inicializado")
+
+    @property
+    def client(self):
+        """Obtiene el cliente de Elasticsearch de forma lazy"""
+        if self._client is None:
+            logger.info("🔌 Conectando a Elasticsearch en localhost:9200")
+            self._client = Elasticsearch("http://localhost:9200")
+            if self._client.ping():
                 logger.info("✅ Conexión a Elasticsearch establecida")
             else:
-                logger.warning("⚠️ Elasticsearch no responde al ping")
-                
-        except Exception as e:
-            logger.error(f"❌ Error al conectar con Elasticsearch: {str(e)}")
-            self.client = None
+                logger.error("❌ No se pudo conectar a Elasticsearch")
+        return self._client
 
     def setup_index(self, index_name: str = 'loinc_docs') -> bool:
         """Configura el índice con los mappings apropiados"""

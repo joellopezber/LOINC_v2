@@ -60,38 +60,19 @@ def test_ontology_service(data, websocket_instance=None):
         logger.info("\n1️⃣ Verificando datos en WebSocket...")
         logger.info(f"📦 Storage Data: {json.dumps(websocket_instance.storage_data, indent=2)}")
         
-        encrypted_key = websocket_instance.storage_data.get('openaiApiKey')
-        install_timestamp = websocket_instance.storage_data.get('installTimestamp')
         term = data.get('text', '')
-
-        if not all([encrypted_key, install_timestamp, term]):
-            logger.error("❌ Faltan datos requeridos")
+        if not term:
+            logger.error("❌ No se proporcionó término a buscar")
             return {
                 'status': 'error',
-                'message': 'Se requiere API Key, Installation Time y término a buscar',
+                'message': 'Se requiere término a buscar',
                 'details': result
             }
             
-        # 2. Inicializar OpenAI con key encriptada
-        logger.info("\n2️⃣ Inicializando servicio OpenAI...")
-        openai = OpenAIService()
-        success = openai.initialize_with_encrypted(encrypted_key, install_timestamp)
+        # 2. Procesar término
+        logger.info(f"\n2️⃣ Procesando término: {term}")
         
-        if not success:
-            logger.error("❌ Error inicializando OpenAI")
-            return {
-                'status': 'error',
-                'message': 'Error al inicializar OpenAI',
-                'details': result
-            }
-            
-        # 3. Procesar término
-        logger.info(f"\n3️⃣ Procesando término: {term}")
-        
-        response = ontology_service.process_term(
-            term=term,
-            openai_service=openai
-        )
+        response = ontology_service.process_term(term)
         
         if not response:
             logger.error("❌ Error al procesar el término")
@@ -101,17 +82,17 @@ def test_ontology_service(data, websocket_instance=None):
                 'details': result
             }
 
-        # 4. Procesar respuesta JSON
+        # 3. Procesar respuesta JSON
         try:
             # Log de la respuesta completa
-            logger.info("\n4️⃣ Respuesta de OpenAI:")
+            logger.info("\n3️⃣ Respuesta de OpenAI:")
             logger.info("-" * 80)
             logger.info(response)
             logger.info("-" * 80)
 
             # Limpiar y extraer JSON
             json_str = clean_json_response(response)
-            logger.info("\n5️⃣ JSON limpio:")
+            logger.info("\n4️⃣ JSON limpio:")
             logger.info("-" * 80)
             logger.info(json_str)
             logger.info("-" * 80)
@@ -131,7 +112,7 @@ def test_ontology_service(data, websocket_instance=None):
                     'details': result
                 }
 
-            # 6. Éxito
+            # 4. Éxito
             return {
                 'status': 'success',
                 'query': term,

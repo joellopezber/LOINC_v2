@@ -8,6 +8,7 @@ import base64
 import traceback
 from dotenv import load_dotenv
 from pathlib import Path
+from typing import Optional
 
 # Configurar logging
 logging.basicConfig(level=logging.INFO)
@@ -121,34 +122,56 @@ class EncryptionService:
             logger.error(traceback.format_exc())
             return None
 
-    def decrypt(self, encrypted_data, install_timestamp):
+    def decrypt(self, encrypted_data: str, install_timestamp: str) -> Optional[str]:
         """
-        Desencripta datos usando AES-GCM, igual que el frontend
+        Desencripta datos usando AES-GCM
+        
+        Args:
+            encrypted_data: Datos encriptados en base64
+            install_timestamp: Timestamp de instalación
+            
+        Returns:
+            Datos desencriptados o None si hay error
         """
         try:
             if not encrypted_data:
                 return None
-                
-            # Decodificar base64
+
+            # 1. Obtener master key
+            from .master_key_service import master_key_service
+            master_key = master_key_service.get_key_for_install(install_timestamp)
+            if not master_key:
+                logger.error("❌ No se pudo obtener la master key")
+                return None
+            
+            # 2. Decodificar datos encriptados
             decoded_data = base64.b64decode(encrypted_data)
             
-            # Extraer salt, iv y contenido
+            # 3. Extraer salt, iv y contenido
             salt = decoded_data[:16]
             iv = decoded_data[16:28]
             content = decoded_data[28:]
             
-            # Obtener master key y derivar clave específica
-            master_key = self.get_key_for_install(install_timestamp)
-            key = self._derive_key(salt, master_key)
+            # 4. Derivar clave específica usando HKDF
+            hkdf = HKDF(
+                algorithm=hashes.SHA256(),
+                length=32,
+                salt=salt,
+                info=b'',
+            )
+            key = hkdf.derive(bytes.fromhex(master_key))
             
-            # Desencriptar usando AES-GCM
+            # 5. Desencriptar usando AES-GCM
             aesgcm = AESGCM(key)
             decrypted_data = aesgcm.decrypt(iv, content, None)
             
-            return decrypted_data.decode()
-            
+            # 6. Decodificar a string
+            result = decrypted_data.decode()
+            logger.info("✅ Datos desencriptados correctamente")
+            return result
+
         except Exception as e:
-            logger.error(f"Error en desencriptación: {e}")
+            logger.error(f"❌ Error desencriptando datos: {e}")
             logger.error(traceback.format_exc())
             return None
 

@@ -3,9 +3,34 @@ from typing import List, Dict, Optional
 import logging
 
 class SQLService:
-    def __init__(self, db_path: str = 'loinc.db'):
-        self.db_path = db_path
-        self.setup_database()
+    _instance = None
+
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super(SQLService, cls).__new__(cls)
+        return cls._instance
+
+    def __init__(self):
+        """Inicializa el servicio SQL de forma lazy"""
+        if hasattr(self, 'initialized'):
+            return
+            
+        logger.info("💾 Inicializando SQLService")
+        self._connection = None
+        self.initialized = True
+        logger.info("✅ SQLService base inicializado")
+
+    @property
+    def connection(self):
+        """Obtiene la conexión SQL de forma lazy"""
+        if self._connection is None:
+            logger.info("🔌 Conectando a SQLite...")
+            try:
+                self._connection = sqlite3.connect('loinc.db')
+                logger.info("✅ Conexión a SQLite establecida")
+            except Exception as e:
+                logger.error(f"❌ Error conectando a SQLite: {e}")
+        return self._connection
 
     def setup_database(self):
         """Configura la base de datos y crea las tablas necesarias si no existen."""

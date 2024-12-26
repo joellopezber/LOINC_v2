@@ -80,10 +80,44 @@ class OntologyService:
         """Inicializa el servicio de ontología"""
         logger.info("🔍 Servicio de Ontología creado")
 
+    def _validate_response(self, response: str) -> bool:
+        """
+        Valida que la respuesta tenga el formato JSON esperado
+        Args:
+            response: Respuesta de OpenAI
+        Returns:
+            bool: True si la respuesta es válida
+        """
+        try:
+            import json
+            data = json.loads(response)
+            
+            # Validar campos requeridos
+            required_fields = [
+                'term_in_english',
+                'related_terms',
+                'test_types',
+                'loinc_codes',
+                'keywords'
+            ]
+            
+            for field in required_fields:
+                if field not in data:
+                    logger.error(f"❌ Falta campo requerido: {field}")
+                    return False
+                    
+            return True
+            
+        except json.JSONDecodeError:
+            logger.error("❌ Respuesta no es JSON válido")
+            return False
+        except Exception as e:
+            logger.error(f"❌ Error validando respuesta: {str(e)}")
+            return False
+
     def process_term(
         self, 
         term: str,
-        openai_service: OpenAIService,
         model: str = "gpt-4o",
         temperature: float = 0.5
     ) -> Optional[str]:
@@ -91,21 +125,42 @@ class OntologyService:
         Procesa un término médico usando OpenAI para obtener información estructurada
         Args:
             term: Término médico a analizar
-            openai_service: Instancia inicializada de OpenAIService
-            model: Modelo de OpenAI a usar
-            temperature: Temperatura para la respuesta
+            model: Modelo de OpenAI a usar (default: gpt-4o)
+            temperature: Temperatura para la respuesta (default: 0.5)
         Returns:
             Respuesta de OpenAI o None si hay error
         """
         try:
-            logger.debug(f"🔄 Procesando término: {term}")
-            logger.debug(f"🌡️ Temperatura: {temperature}")
-            logger.debug(f"🤖 Modelo: {model}")
+            logger.info("=" * 50)
+            logger.info("🔍 INICIO PROCESO DE TÉRMINO")
+            logger.info(f"📝 Término recibido: '{term}'")
+            logger.info(f"⚙️ Configuración: model={model}, temperature={temperature}")
+
+            # Validar término
+            if not term or not isinstance(term, str):
+                logger.error("❌ Término inválido")
+                logger.error(f"Tipo recibido: {type(term)}")
+                logger.error(f"Valor recibido: {term}")
+                return None
 
             # Construir el prompt
             user_prompt = f"""Analyze the following medical term and provide relevant information for LOINC search:
             Term: {term}"""
-            logger.debug(f"👤 User Prompt: {user_prompt}")
+            logger.info("📋 User Prompt construido:")
+            logger.info("-" * 40)
+            logger.info(user_prompt)
+            logger.info("-" * 40)
+
+            # Obtener instancia de OpenAI Service
+            logger.info("🔄 Obteniendo OpenAIService...")
+            from .service_locator import ServiceLocator
+            openai_service = ServiceLocator.get_instance().get_service('openai')
+            
+            if not openai_service:
+                logger.error("❌ No se pudo obtener OpenAIService")
+                return None
+            
+            logger.info("✅ OpenAIService obtenido correctamente")
 
             # Procesar con OpenAI
             logger.info("🚀 Enviando solicitud a OpenAI...")
@@ -120,13 +175,27 @@ class OntologyService:
                 logger.error("❌ No se obtuvo respuesta de OpenAI")
                 return None
 
-            logger.debug(f"📩 Respuesta recibida: {response[:100]}...")
-            logger.info("✅ Término procesado exitosamente")
+            logger.info("📩 Respuesta recibida de OpenAI")
+            
+            # Validar formato de respuesta
+            logger.info("🔍 Validando formato de respuesta...")
+            if not self._validate_response(response):
+                logger.error("❌ Formato de respuesta inválido")
+                return None
+
+            logger.info("✅ Respuesta validada correctamente")
+            logger.debug(f"📩 Primeros 100 caracteres: {response[:100]}...")
+            logger.info("✅ TÉRMINO PROCESADO EXITOSAMENTE")
+            logger.info("=" * 50)
             return response
 
         except Exception as e:
-            logger.error(f"❌ Error procesando término: {str(e)}")
+            logger.error("=" * 50)
+            logger.error("❌ ERROR EN PROCESO DE TÉRMINO")
+            logger.error(f"Tipo de error: {type(e).__name__}")
+            logger.error(f"Mensaje: {str(e)}")
             logger.exception("Detalles del error:")
+            logger.error("=" * 50)
             return None
 
 # Crear instancia global

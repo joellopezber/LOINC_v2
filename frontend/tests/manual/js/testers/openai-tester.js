@@ -38,6 +38,23 @@ export class OpenAITester {
             this.isConnected = false;
             this.onConnectionChange?.(false);
         });
+
+        // Escuchar respuestas de OpenAI
+        this.socket.on('openai.test_result', (response) => {
+            console.log('📩 Respuesta recibida:', response);
+            this.onTypingEnd?.();
+
+            if (response.status === 'success') {
+                // Añadir respuesta al historial
+                this.messages.push({
+                    role: 'assistant',
+                    content: response.response
+                });
+                this.onMessageReceived?.(response.response, false);
+            } else {
+                console.error('❌ Error:', response.message || 'Error desconocido');
+            }
+        });
     }
 
     async sendMessage(message) {
@@ -61,24 +78,8 @@ export class OpenAITester {
             systemPrompt: this.systemPrompt
         };
 
-        return new Promise((resolve, reject) => {
-            this.socket.emit('openai.test_search', payload, (response) => {
-                console.log('📩 Respuesta recibida:', response);
-                this.onTypingEnd?.();
-
-                if (response.status === 'success') {
-                    // Añadir respuesta al historial
-                    this.messages.push({
-                        role: 'assistant',
-                        content: response.response
-                    });
-                    this.onMessageReceived?.(response.response, false);
-                    resolve(response);
-                } else {
-                    reject(new Error(response.message || 'Error desconocido'));
-                }
-            });
-        });
+        // Enviar mensaje sin esperar callback
+        this.socket.emit('openai.test_search', payload);
     }
 
     clearHistory() {

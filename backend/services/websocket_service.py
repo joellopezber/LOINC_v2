@@ -4,6 +4,8 @@ import json
 import eventlet
 import logging
 from .encryption_service import encryption_service
+from .master_key_service import master_key_service
+from .service_locator import service_locator
 
 # Configurar logging
 logging.basicConfig(level=logging.DEBUG)
@@ -13,274 +15,185 @@ eventlet.monkey_patch()
 
 class WebSocketService:
     def __init__(self, app):
+        """Inicializa el servicio WebSocket"""
+        logger.info("🔌 Inicializando WebSocket")
         self.app = app
-        self.socketio = SocketIO(
-            app,
-            cors_allowed_origins="*",
-            async_mode='eventlet',
-            logger=False,
-            engineio_logger=False,
-            transports=['websocket']
-        )
-        # Almacenamiento en memoria de la configuración
-        self.storage_data = {
-            'searchConfig': {},
-            'openaiApiKey': None,
-            'installTimestamp': None
-        }
-        # Almacenar último valor para comparar cambios
-        self.last_values = {}
-        
-        # Inicializar SearchService
-        from .search_service import SearchService
-        self.search_service = SearchService(self)
-        
-        # Configurar handlers
+        self.socketio = SocketIO(app, cors_allowed_origins="*")
+        self._storage = None
         self._setup_handlers()
-            
-    def _has_value_changed(self, key: str, new_value: Any) -> bool:
-        """Comprueba si el valor ha cambiado respecto al último almacenado"""
-        if key not in self.last_values:
-            return True
-        return self.last_values[key] != new_value
+        logger.info("✅ WebSocket inicializado")
+        
+    @property
+    def storage(self):
+        """Obtiene el StorageService de forma lazy"""
+        if self._storage is None:
+            self._storage = service_locator.get('storage')
+        return self._storage
 
-    def _log_value_update(self, key: str, value: Any, request_id: str):
-        """Log formateado para actualizaciones de valores"""
-        if self._has_value_changed(key, value):
-            # Si el valor ha cambiado, mostrar JSON completo y formateado
-            formatted_json = json.dumps({
-                'key': key,
-                'value': value,
-                'request_id': request_id
-            }, indent=2)
-            logger.info(f"📥 Nuevo valor recibido:\n{formatted_json}")
-            self.last_values[key] = value
-        else:
-            # Si no ha cambiado, mostrar versión simplificada
-            logger.debug(f"📤 Solicitud set_value: key='{key}'")
-            
     def _setup_handlers(self):
         @self.socketio.on('connect')
-        def handle_connect(auth):
-            logger.info("🔌 Cliente conectado")
-            # No enviamos la master key en la conexión, esperamos el installTimestamp
-            emit('connect_response', {'status': 'success'})
+        def handle_connect():
+            """Maneja la conexión de un cliente"""
+            logger.info("📡 Nueva conexión WebSocket")
             
         @self.socketio.on('disconnect')
         def handle_disconnect():
-            logger.info("🔌 Cliente desconectado")
-            
-        @self.socketio.on('openai.test_search')
-        def handle_test_search(data):
-            """Maneja la solicitud de prueba de búsqueda con OpenAI"""
-            logger.info("🔍 Recibida solicitud de prueba OpenAI")
-            
-            text = data.get('text')
-            encrypted_key = data.get('apiKey')
-            install_timestamp = data.get('installTimestamp')
-            
-            if not all([text, encrypted_key, install_timestamp]):
-                logger.error("❌ Faltan datos requeridos para la prueba")
-                emit('openai.test_result', {
-                    'status': 'error',
-                    'message': 'Se requieren: text, apiKey e installTimestamp'
-                })
-                return
-            
-            try:
-                # Desencriptar API key
-                logger.info("🔐 Desencriptando API key...")
-                api_key = encryption_service.decrypt(encrypted_key, install_timestamp)
-                
-                if not api_key:
-                    logger.error("❌ Error desencriptando API key")
-                    emit('openai.test_result', {
-                        'status': 'error',
-                        'message': 'Error al desencriptar la API key'
-                    })
-                    return
-                
-                # Validar formato de API key
-                if not api_key.startswith('sk-'):
-                    logger.error("❌ API key inválida")
-                    emit('openai.test_result', {
-                        'status': 'error',
-                        'message': 'API key inválida (debe empezar con sk-)'
-                    })
-                    return
-                
-                logger.info("✅ API key desencriptada correctamente")
-                
-                # Almacenar en storage_data para OpenAIService
-                self.storage_data['openaiApiKey'] = encrypted_key
-                self.storage_data['installTimestamp'] = install_timestamp
-                
-                # Inicializar OpenAI service
-                from .openai_service import openai_service
-                if not openai_service.initialize(self):
-                    logger.error("❌ Error inicializando OpenAI service")
-                    emit('openai.test_result', {
-                        'status': 'error',
-                        'message': 'Error inicializando OpenAI service'
-                    })
-                    return
-                
-                # Probar conexión
-                test_result = openai_service.test_connection()
-                emit('openai.test_result', test_result)
-                logger.info("✅ Prueba completada")
-                
-            except Exception as e:
-                logger.error(f"❌ Error en prueba OpenAI: {e}")
-                emit('openai.test_result', {
-                    'status': 'error',
-                    'message': str(e)
-                })
-            
+            """Maneja la desconexión de un cliente"""
+            logger.info("👋 Cliente desconectado")
+
         @self.socketio.on('encryption.get_master_key')
         def handle_get_master_key(data):
             """Maneja la solicitud de obtener la master key"""
-            logger.info("Cliente solicitando master key")
-            install_timestamp = data.get('installTimestamp')
-            
-            if not install_timestamp:
-                logger.error("❌ No se proporcionó installTimestamp")
-                emit('encryption.master_key', {'error': 'installTimestamp required'})
-                return
+            try:
+                logger.info("🔐 Solicitud de master key recibida")
                 
-            master_key = encryption_service.get_key_for_install(install_timestamp)
-            emit('encryption.master_key', {'key': master_key})
-            logger.info("Master key enviada al cliente")
+                # 1. Validar datos
+                if not isinstance(data, dict):
+                    error_msg = "❌ Datos recibidos no son un diccionario válido"
+                    logger.error(error_msg)
+                    emit('encryption.master_key', {'status': 'error', 'message': error_msg})
+                    return
 
-        @self.socketio.on('storage.get_value')
-        def handle_get_value(data: Dict[str, Any]):
-            """Maneja la solicitud de valor del localStorage"""
-            logger.info(f"📤 Enviando valor de: {data}")
-            key = data.get('key')
-            request_id = data.get('request_id')
-            
-            if key:
-                value = self.storage_data.get(key)
-                logger.info(f"📤 Enviando valor de: {key}")
-                emit('storage_value', {
-                    'value': value,
-                    'request_id': request_id
+                # 2. Obtener timestamp
+                install_timestamp = data.get('installTimestamp')
+                if not install_timestamp:
+                    error_msg = "❌ No se proporcionó installTimestamp"
+                    logger.error(error_msg)
+                    emit('encryption.master_key', {'status': 'error', 'message': error_msg})
+                    return
+
+                # 3. Obtener master key usando el servicio dedicado
+                master_key = master_key_service.get_key_for_install(install_timestamp)
+                if not master_key:
+                    error_msg = "❌ Error generando master key"
+                    logger.error(error_msg)
+                    emit('encryption.master_key', {'status': 'error', 'message': error_msg})
+                    return
+
+                # 4. Enviar respuesta
+                logger.info("✅ Master key generada correctamente")
+                emit('encryption.master_key', {
+                    'status': 'success',
+                    'key': master_key
                 })
-            else:
-                logger.error("❌ Key no proporcionada")
-                emit('storage_value', {
-                    'error': 'Key not provided',
-                    'request_id': request_id
+
+            except Exception as e:
+                error_msg = f"❌ Error obteniendo master key: {str(e)}"
+                logger.error(error_msg)
+                emit('encryption.master_key', {'status': 'error', 'message': error_msg})
+
+        @self.socketio.on('openai.test_search')
+        def handle_test_search(data):
+            """Maneja la solicitud de prueba de búsqueda con OpenAI"""
+            try:
+                logger.info("\n🔍 Iniciando prueba OpenAI...")
+                logger.info(f"📦 Datos recibidos: {json.dumps(data, indent=2)}")
+                
+                # 1. Validar datos de entrada
+                if not isinstance(data, dict):
+                    error_msg = "❌ Datos recibidos no son un diccionario válido"
+                    logger.error(error_msg)
+                    emit('openai.test_result', {'status': 'error', 'message': error_msg})
+                    return
+
+                # 2. Almacenar datos en storage
+                if not self.storage:
+                    error_msg = "❌ StorageService no disponible"
+                    logger.error(error_msg)
+                    emit('openai.test_result', {'status': 'error', 'message': error_msg})
+                    return
+
+                # Almacenar datos temporales para el test
+                self.storage.set_value('openai_test_data', {
+                    'text': data.get('text'),
+                    'messages': data.get('messages', []),
+                    'systemPrompt': data.get('systemPrompt', '')
                 })
                 
+                # 3. Obtener respuesta del storage
+                response = self.storage.process_openai_test()
+                
+                # 4. Enviar respuesta
+                logger.info(f"📤 Enviando resultado: {json.dumps(response, indent=2)}")
+                emit('openai.test_result', {
+                    'status': 'success',
+                    'query': data.get('text', ''),
+                    'response': response.get('response') if response else None
+                })
+                
+            except Exception as e:
+                error_msg = f"❌ Error en handle_test_search: {str(e)}"
+                logger.error(error_msg)
+                emit('openai.test_result', {'status': 'error', 'message': error_msg})
+
         @self.socketio.on('storage.set_value')
         def handle_set_value(data: Dict[str, Any]):
-            """Maneja la solicitud de establecer un valor en localStorage"""
+            """Maneja la solicitud de establecer un valor"""
             key = data.get('key')
             value = data.get('value')
             request_id = data.get('request_id')
             
-            # Validar que la key sea permitida
-            allowed_keys = ['searchConfig', 'openaiApiKey', 'installTimestamp']
-            if key not in allowed_keys:
-                logger.error(f"❌ Key no permitida: {key}")
+            if not self.storage:
+                error_msg = "❌ StorageService no disponible"
+                logger.error(error_msg)
                 emit('storage.value_set', {
                     'status': 'error',
-                    'message': f'Key {key} no permitida',
+                    'message': error_msg,
                     'request_id': request_id
                 })
                 return
-            
+                
             if key and value is not None:
-                # Log del valor recibido
-                self._log_value_update(key, value, request_id)
-                
-                # Actualizar cache local - guardar el valor directamente
-                if key == 'searchConfig':
-                    self.storage_data[key] = value.get('value', value)
-                else:
-                    self.storage_data[key] = value
+                if self.storage.set_value(key, value):
+                    # Confirmar al cliente original
+                    emit('storage.value_set', {
+                        'status': 'success',
+                        'key': key,
+                        'request_id': request_id
+                    })
                     
-                logger.info(f"💾 Almacenado: {key}")
-                logger.debug(f"📦 Valor almacenado: {json.dumps(self.storage_data[key], indent=2)}")
-                
-                # Confirmar al cliente original
-                emit('storage.value_set', {
-                    'status': 'success',
-                    'key': key,
-                    'request_id': request_id
-                })
-                
-                # Broadcast a todos los clientes excepto al emisor
-                emit('storage.value_updated', {
-                    'key': key,
-                    'value': value
-                }, broadcast=True, include_self=False)
-                
-                logger.debug(f"📡 Broadcast enviado: {key}")
+                    # Broadcast a todos excepto al emisor
+                    emit('storage.value_updated', {
+                        'key': key,
+                        'value': value
+                    }, broadcast=True, include_self=False)
+                else:
+                    emit('storage.value_set', {
+                        'status': 'error',
+                        'message': 'Error setting value',
+                        'request_id': request_id
+                    })
             else:
-                logger.error("❌ Key y value son requeridos")
                 emit('storage.value_set', {
                     'status': 'error',
                     'message': 'Key and value are required',
                     'request_id': request_id
                 })
 
-        @self.socketio.on('storage.get_all')
-        def handle_get_all(data: Dict[str, Any]):
-            """Maneja la solicitud de obtener todos los valores"""
-            logger.info("📤 Enviando todos los valores")
+        @self.socketio.on('storage.get_value')
+        def handle_get_value(data: Dict[str, Any]):
+            """Maneja la solicitud de obtener un valor"""
+            key = data.get('key')
             request_id = data.get('request_id')
             
-            # Enviar todos los valores almacenados
-            emit('storage.all_values', {
-                'values': self.storage_data,
-                'request_id': request_id
-            })
-            logger.info("Todos los valores enviados")
-
-        @self.socketio.on('search.perform')
-        def handle_search(data: Dict[str, Any]):
-            """Maneja las solicitudes de búsqueda"""
-            logger.info(f"Recibida solicitud de búsqueda: {data}")
-            term = data.get('term')
-            config = data.get('config')
-            request_id = data.get('request_id')
-
-            if not term:
-                logger.error("Error: Término de búsqueda no proporcionado")
-                emit('search.results', {
-                    'error': 'Search term is required',
+            if not self.storage:
+                error_msg = "❌ StorageService no disponible"
+                logger.error(error_msg)
+                emit('storage.value', {
+                    'error': error_msg,
                     'request_id': request_id
                 })
                 return
-
-            try:
-                # Log de la configuración para debug
-                logger.debug(f"Configuración de búsqueda: {json.dumps(config, indent=2)}")
-                logger.debug(f"Término de búsqueda: {term}")
-
-                # TODO: Implementar la lógica de búsqueda aquí
-                # Por ahora, solo devolvemos un mensaje de prueba
-                results = {
-                    'term': term,
-                    'config': config,
-                    'results': [],
-                    'message': 'Búsqueda recibida correctamente'
-                }
-
-                emit('search.results', {
-                    'status': 'success',
-                    'data': results,
+                
+            if key:
+                value = self.storage.get_value(key)
+                emit('storage.value', {
+                    'value': value,
                     'request_id': request_id
                 })
-                logger.info(f"Resultados enviados para término: {term}")
-
-            except Exception as e:
-                logger.error(f"Error procesando búsqueda: {e}")
-                emit('search.results', {
-                    'status': 'error',
-                    'error': str(e),
+            else:
+                emit('storage.value', {
+                    'error': 'Key not provided',
                     'request_id': request_id
                 })
 

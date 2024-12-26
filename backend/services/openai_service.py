@@ -2,10 +2,9 @@ import os
 import logging
 from openai import OpenAI
 from typing import Optional, Dict, Any, List
-from .encryption_service import encryption_service
+from .service_locator import service_locator
 
 # Configurar logging
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Valores por defecto
@@ -14,53 +13,77 @@ DEFAULT_TEMPERATURE = 0.7
 DEFAULT_SYSTEM_PROMPT = """Responde la pregunta del usuario de manera clara y concisa."""
 
 class OpenAIService:
+    _instance = None
+
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super(OpenAIService, cls).__new__(cls)
+        return cls._instance
+
     def __init__(self):
-        """Inicializa el servicio de OpenAI"""
+        """Inicializa el servicio OpenAI de forma lazy"""
+        if hasattr(self, 'initialized'):
+            return
+            
+        logger.info("🤖 Inicializando OpenAI service...")
         self.client = None
         self.initialized = False
-        logger.info("🤖 Servicio OpenAI creado")
+        self._storage = None
+        logger.info("✅ OpenAI service base inicializado (pendiente conexión)")
 
-    def initialize_with_encrypted(self, encrypted_key: str, install_timestamp: str) -> bool:
-        """
-        Inicializa el servicio usando una API key encriptada
-        Args:
-            encrypted_key: API key encriptada
-            install_timestamp: Timestamp de instalación para desencriptar
-        Returns:
-            bool: True si la inicialización fue exitosa
-        """
+    @property
+    def storage(self):
+        """Obtiene el StorageService de forma lazy"""
+        if self._storage is None:
+            self._storage = service_locator.get('storage')
+            if self._storage is None:
+                logger.error("❌ StorageService no encontrado en ServiceLocator")
+        return self._storage
+
+    def _get_credentials(self):
+        """Obtiene y desencripta las credenciales desde storage"""
         try:
-            # 1. Desencriptar API Key
-            logger.info("\n🔄 Desencriptando API Key...")
+            if not self.storage:
+                logger.error("❌ No se pudo obtener StorageService")
+                return None
+
+            # Obtener credenciales encriptadas
+            encrypted_key = self.storage.get_value('openaiApiKey')
+            install_timestamp = self.storage.get_value('installTimestamp')
+
+            if not encrypted_key or not install_timestamp:
+                logger.error("❌ Credenciales no encontradas en storage")
+                return None
+
+            # Desencriptar API key
+            from .encryption_service import encryption_service
             api_key = encryption_service.decrypt(encrypted_key, install_timestamp)
-            
+
             if not api_key:
-                logger.error("❌ Error al desencriptar la API key")
-                return False
+                logger.error("❌ Error desencriptando API key")
+                return None
 
-            # Mostrar key enmascarada
-            masked_key = f"{api_key[:4]}...{api_key[-4:]}"
-            logger.info(f"🔓 API Key desencriptada: {masked_key}")
-
-            # 2. Inicializar con la key desencriptada
-            return self.initialize(api_key)
+            logger.info("✅ Credenciales obtenidas correctamente")
+            return api_key
 
         except Exception as e:
-            logger.error(f"❌ Error en initialize_with_encrypted: {e}")
-            return False
+            logger.error(f"❌ Error obteniendo credenciales: {e}")
+            return None
 
-    def initialize(self, api_key: str) -> bool:
-        """Inicializa el servicio OpenAI con la API key proporcionada"""
+    def initialize(self) -> bool:
+        """Inicializa el cliente OpenAI con las credenciales"""
         try:
-            if not api_key or not api_key.startswith('sk-'):
-                logger.error("❌ API key inválida")
+            logger.info("🔄 Inicializando cliente OpenAI...")
+            
+            api_key = self._get_credentials()
+            if not api_key:
                 return False
-                
+
             self.client = OpenAI(api_key=api_key)
             self.initialized = True
-            logger.info("✅ Cliente OpenAI inicializado")
+            logger.info("✅ Cliente OpenAI inicializado correctamente")
             return True
-            
+
         except Exception as e:
             logger.error(f"❌ Error inicializando OpenAI: {e}")
             return False
@@ -68,24 +91,24 @@ class OpenAIService:
     def process_query(
         self, 
         user_prompt: str,
+        chat_history: List[Dict[str, str]] = None,
         model: str = DEFAULT_MODEL,
         temperature: float = DEFAULT_TEMPERATURE,
-        system_prompt: str = DEFAULT_SYSTEM_PROMPT,
-        chat_history: List[Dict[str, str]] = None
+        system_prompt: str = DEFAULT_SYSTEM_PROMPT
     ) -> Optional[str]:
         """
         Procesa una consulta usando OpenAI
         Args:
             user_prompt: Texto de la consulta (obligatorio)
+            chat_history: Historial de conversación (opcional)
             model: Modelo a usar (default: gpt-4o)
             temperature: Temperatura para la respuesta (default: 0.7)
             system_prompt: Prompt de sistema (default: prompt básico)
-            chat_history: Historial de conversación (default: None)
         Returns:
             Respuesta de OpenAI o None si hay error
         """
-        if not self.initialized:
-            logger.error("❌ Cliente no inicializado")
+        if not self.initialized and not self.initialize():
+            logger.error("❌ Servicio no inicializado")
             return None
 
         if not user_prompt:
@@ -95,7 +118,8 @@ class OpenAIService:
         try:
             # Log de parámetros usados
             logger.info(f"🔄 Procesando consulta:")
-            logger.info(f"📝 Modelo: {model}")
+            logger.info(f"📝 Prompt: {user_prompt[:50]}...")
+            logger.info(f"🤖 Modelo: {model}")
             logger.info(f"🌡️ Temperatura: {temperature}")
             
             # Construir mensajes
@@ -103,29 +127,23 @@ class OpenAIService:
             
             # Añadir historial si existe
             if chat_history:
-                # Filtrar el último mensaje si es del usuario (evitar duplicados)
-                filtered_history = chat_history[:-1] if chat_history and chat_history[-1]['role'] == 'user' else chat_history
-                
-                for msg in filtered_history:
-                    messages.append({
-                        "role": msg["role"],
-                        "content": msg["content"]
-                    })
+                messages.extend([
+                    {"role": msg["role"], "content": msg["content"]}
+                    for msg in chat_history
+                ])
             
             # Añadir mensaje actual
             messages.append({"role": "user", "content": user_prompt})
-
-            # Log de mensajes para debug
-            logger.debug("📨 Mensajes enviados a OpenAI:")
-            for msg in messages:
-                logger.debug(f"- [{msg['role']}]: {msg['content'][:50]}...")
 
             response = self.client.chat.completions.create(
                 model=model,
                 temperature=temperature,
                 messages=messages
             )
-            return response.choices[0].message.content
+            
+            result = response.choices[0].message.content
+            logger.info("✅ Respuesta obtenida correctamente")
+            return result
             
         except Exception as e:
             logger.error(f"❌ Error procesando consulta: {e}")

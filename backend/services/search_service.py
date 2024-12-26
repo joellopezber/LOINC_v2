@@ -3,27 +3,31 @@ import logging
 import time
 from .elastic_service import ElasticService
 from .sql_service import SQLService
+from .service_locator import service_locator
 import json
 
 # Configurar logging
-logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 class SearchService:
-    def __init__(self, websocket_service=None):
-        """
-        Inicializa los servicios de búsqueda.
-        
-        Args:
-            websocket_service: Instancia de WebSocketService para acceder al storage
-        """
+    _instance = None
+
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super(SearchService, cls).__new__(cls)
+        return cls._instance
+
+    def __init__(self):
+        """Inicializa los servicios de búsqueda de forma lazy"""
+        if hasattr(self, 'initialized'):
+            return
+            
         logger.info("🔍 Inicializando SearchService")
-        self.elastic_service = ElasticService()
-        self.sql_service = SQLService()
-        self.websocket = websocket_service
-        self._user_configs = {}  # Almacena configuración por usuario
-        self._default_service = 'sql'  # Por defecto usamos SQL (más seguro)
-        self._service_stats = {  # Estadísticas globales de uso
+        self._elastic_service = None
+        self._sql_service = None
+        self._storage = None
+        self._default_service = 'sql'
+        self._service_stats = {
             'elastic': {
                 'requests': 0,
                 'errors': 0,
@@ -35,68 +39,46 @@ class SearchService:
                 'last_request': None
             }
         }
-        logger.info("✅ SearchService inicializado")
+        self.initialized = True
+        logger.info("✅ SearchService base inicializado")
 
-    def initialize_user_config(self, user_id: str, websocket_instance = None) -> bool:
-        """
-        Inicializa la configuración de un usuario desde el WebSocket.
-        """
-        try:
-            # 1. Validar acceso al storage
-            if not self.websocket:
-                logger.error("❌ No hay WebSocket configurado")
-                return False
+    @property
+    def elastic_service(self):
+        """Obtiene ElasticService de forma lazy"""
+        if self._elastic_service is None:
+            from .elastic_service import ElasticService
+            self._elastic_service = ElasticService()
+        return self._elastic_service
 
-            # 2. Obtener datos del storage
-            storage_data = self.websocket.storage_data
+    @property
+    def sql_service(self):
+        """Obtiene SQLService de forma lazy"""
+        if self._sql_service is None:
+            from .sql_service import SQLService
+            self._sql_service = SQLService()
+        return self._sql_service
 
-            # 3. Obtener searchConfig
-            search_config = storage_data.get('searchConfig', {})
-            if isinstance(search_config, dict) and 'value' in search_config:
-                search_config = search_config['value']
-            
-            if not search_config or not isinstance(search_config, dict):
-                logger.error("❌ searchConfig inválido")
-                return False
+    @property
+    def storage(self):
+        """Obtiene el StorageService de forma lazy"""
+        if self._storage is None:
+            self._storage = service_locator.get('storage')
+            if self._storage is None:
+                logger.error("❌ StorageService no encontrado en ServiceLocator")
+        return self._storage
 
-            # 4. Obtener configuración de búsqueda
-            config = search_config.get('search', {})
-            if not config:
-                logger.error("❌ No hay configuración de búsqueda")
-                return False
-
-            # 5. Obtener dbMode
-            db_mode = config.get('dbMode', self._default_service)
-            if not db_mode or db_mode not in ['elastic', 'sql']:
-                logger.warning(f"⚠️ dbMode inválido: {db_mode}, usando default")
-                db_mode = self._default_service
-
-            # 6. Guardar configuración
-            self._user_configs[user_id] = {
-                'preferred_service': db_mode,
-                'last_activity': time.strftime('%Y-%m-%d %H:%M:%S'),
-                'config': search_config
-            }
-
-            logger.debug(f"✅ Configuración inicializada para usuario {user_id}")
-            return True
-
-        except Exception as e:
-            logger.error(f"❌ Error inicializando configuración: {e}")
-            return False
-
-    def get_user_preference(self, user_id: str, websocket_instance = None) -> str:
+    def get_user_preference(self, user_id: str) -> str:
         """
         Obtiene el servicio preferido de un usuario.
         """
         try:
-            # Si no hay configuración y tenemos websocket, intentar inicializar
-            if user_id not in self._user_configs:
-                self.initialize_user_config(user_id, websocket_instance)
+            if not self.storage:
+                logger.error("❌ No se pudo obtener StorageService")
+                return self._default_service
 
-            # Obtener preferencia
-            user_config = self._user_configs.get(user_id, {})
-            service = user_config.get('preferred_service', self._default_service)
+            # Obtener configuración del usuario
+            config = self.storage.get_user_config(user_id)
+            service = config.get('search', {}).get('dbMode', self._default_service)
             
             # Validar servicio
             if service not in ['elastic', 'sql']:
@@ -109,13 +91,12 @@ class SearchService:
             logger.error(f"❌ Error obteniendo preferencia: {e}")
             return self._default_service
 
-    def get_service_status(self, user_id: str = None, websocket_instance = None) -> Dict:
+    def get_service_status(self, user_id: str = None) -> Dict:
         """
         Obtiene el estado de los servicios.
         
         Args:
             user_id: Identificador del usuario
-            websocket_instance: Instancia de WebSocket para obtener configuración
         """
         status = {
             'services': {
@@ -124,12 +105,9 @@ class SearchService:
             }
         }
         
-        # Si tenemos websocket y usuario, intentamos inicializar config
-        if websocket_instance and user_id:
-            self.initialize_user_config(user_id, websocket_instance)
-        
-        if user_id:
-            status['user_config'] = self._user_configs.get(user_id, {})
+        # Si tenemos usuario, obtener su configuración
+        if user_id and self.storage:
+            status['user_config'] = self.storage.get_user_config(user_id)
         
         # Verificar Elasticsearch
         try:
@@ -142,7 +120,7 @@ class SearchService:
                 }
             }
         except Exception as e:
-            logging.warning(f"Elasticsearch no disponible: {e}")
+            logger.warning(f"Elasticsearch no disponible: {e}")
         
         # Verificar SQLite
         try:
@@ -155,11 +133,11 @@ class SearchService:
                 }
             }
         except Exception as e:
-            logging.warning(f"SQLite no disponible: {e}")
-            
+            logger.warning(f"SQLite no disponible: {e}")
+
         return status
 
-    def search_loinc(self, query: str, user_id: str, websocket_instance = None, limit: int = 10) -> Dict:
+    def search_loinc(self, query: str, user_id: str, limit: int = 10) -> Dict:
         """
         Realiza una búsqueda usando el servicio configurado por el usuario.
         """
@@ -167,15 +145,18 @@ class SearchService:
         logger.info(f"📝 Query: {query}")
         logger.info(f"👤 Usuario: {user_id}")
         
-        # Asegurarnos de tener la configuración más reciente
-        if websocket_instance and hasattr(websocket_instance, 'storage_data'):
-            logger.info("\n2️⃣ Actualizando configuración desde WebSocket...")
-            self.initialize_user_config(user_id, websocket_instance)
-            
-        service = self.get_user_preference(user_id, websocket_instance)
-        logger.info(f"\n3️⃣ Servicio seleccionado: {service}")
+        if not self.storage:
+            logger.error("❌ No se pudo obtener StorageService")
+            return {'error': 'Storage service no disponible'}
+        
+        # Obtener servicio preferido
+        service = self.get_user_preference(user_id)
+        logger.info(f"\n2️⃣ Servicio seleccionado: {service}")
+        
+        # Obtener configuración actual
+        config = self.storage.get_user_config(user_id)
         logger.info(f"📦 Configuración actual:")
-        logger.info(json.dumps(self._user_configs.get(user_id, {}), indent=2))
+        logger.info(json.dumps(config, indent=2))
         
         results = []
         error = None
@@ -184,11 +165,8 @@ class SearchService:
         self._service_stats[service]['requests'] += 1
         self._service_stats[service]['last_request'] = time.strftime('%Y-%m-%d %H:%M:%S')
         
-        if user_id in self._user_configs:
-            self._user_configs[user_id]['last_activity'] = time.strftime('%Y-%m-%d %H:%M:%S')
-        
         try:
-            logger.info(f"\n4️⃣ Ejecutando búsqueda con {service}...")
+            logger.info(f"\n3️⃣ Ejecutando búsqueda con {service}...")
             if service == 'elastic':
                 results = self.elastic_service.search_loinc(query, limit)
             else:  # sql
@@ -200,32 +178,34 @@ class SearchService:
             error = str(e)
             self._service_stats[service]['errors'] += 1
             logger.error(f"❌ Error en búsqueda con {service}: {e}")
-        
+
         response = {
             'results': results,
             'count': len(results),
             'service': service,
             'error': error,
-            'config': self._user_configs.get(user_id, {}).get('config', {})
+            'config': config
         }
         
-        logger.info("\n5️⃣ Respuesta final:")
+        logger.info("\n4️⃣ Respuesta final:")
         logger.info(json.dumps(response, indent=2))
         return response
 
-    def bulk_insert_docs(self, docs: List[Dict], user_id: str, websocket_instance = None) -> Dict:
+    def bulk_insert_docs(self, docs: List[Dict], user_id: str) -> Dict:
         """
         Inserta documentos usando el servicio configurado por el usuario.
         
         Args:
             docs: Lista de diccionarios con datos LOINC
             user_id: Identificador del usuario
-            websocket_instance: Opcional, para obtener configuración
             
         Returns:
             Estado de la inserción
         """
-        service = self.get_user_preference(user_id, websocket_instance)
+        if not self.storage:
+            return {'success': False, 'error': 'Storage service no disponible'}
+            
+        service = self.get_user_preference(user_id)
         status = {'success': False, 'error': None, 'service': service}
         
         try:
@@ -235,6 +215,9 @@ class SearchService:
                 status['success'] = self.sql_service.bulk_insert_docs(docs)
         except Exception as e:
             status['error'] = str(e)
-            logging.error(f"Error en inserción con {service}: {e}")
+            logger.error(f"Error en inserción con {service}: {e}")
             
-        return status 
+        return status
+
+# Crear instancia global
+search_service = SearchService() 
