@@ -5,7 +5,7 @@ import eventlet
 import logging
 from .encryption_service import encryption_service
 from .master_key_service import master_key_service
-from .service_locator import service_locator
+from ..service_locator import service_locator
 
 # Configurar logging
 logging.basicConfig(level=logging.DEBUG)

@@ -2,7 +2,7 @@ from typing import Optional, Any, Dict
 import logging
 import time
 from .encryption_service import encryption_service
-from .service_locator import service_locator
+from ..service_locator import service_locator
 import json
 
 logger = logging.getLogger(__name__)

@@ -1,5 +1,5 @@
 from flask import Blueprint, request, jsonify
-from services.search_service import SearchService
+from services.on_demand.database_search_service import DatabaseSearchService
 import logging
 from flask_socketio import emit
 from datetime import datetime
@@ -16,7 +16,7 @@ def init_socket_routes(socketio, search_service):
     
     Args:
         socketio: Instancia de SocketIO
-        search_service: Instancia de SearchService
+        search_service: Instancia de DatabaseSearchService
     """
     logger.info("🚀 Inicializando rutas de WebSocket")
 

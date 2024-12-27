@@ -3,22 +3,22 @@ import logging
 import time
 from .elastic_service import ElasticService
 from .sql_service import SQLService
-from .service_locator import service_locator
+from ..service_locator import service_locator
 import json
 
 # Configurar logging
 logger = logging.getLogger(__name__)
 
-class SearchService:
+class DatabaseSearchService:
     _instance = None
 
     def __new__(cls):
         if cls._instance is None:
-            cls._instance = super(SearchService, cls).__new__(cls)
+            cls._instance = super(DatabaseSearchService, cls).__new__(cls)
         return cls._instance
 
     def __init__(self):
-        """Inicializa los servicios de búsqueda de forma lazy"""
+        """Inicializa los servicios de búsqueda en base de datos de forma lazy"""
         if hasattr(self, 'initialized'):
             return
             
@@ -220,4 +220,4 @@ class SearchService:
         return status
 
 # Crear instancia global
-search_service = SearchService() 
+database_search_service = DatabaseSearchService() 

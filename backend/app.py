@@ -2,8 +2,9 @@ import os
 import logging
 from flask import Flask
 from flask_cors import CORS
-from services.websocket_service import WebSocketService
-from services.storage_service import StorageService
+from flask_socketio import SocketIO
+from services.core.websocket_service import WebSocketService
+from services.core.storage_service import StorageService
 from services.service_locator import service_locator
 from routes.test_routes import test_routes
 from routes.app_routes import app_routes

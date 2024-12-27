@@ -1,8 +1,8 @@
 import pytest
 import logging
 import json
-from services.search_service import SearchService
-from services.websocket_service import WebSocketService
+from services.on_demand.database_search_service import DatabaseSearchService
+from services.core.websocket_service import WebSocketService
 
 # Configurar logging
 logging.basicConfig(
