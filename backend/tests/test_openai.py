@@ -1,149 +1,133 @@
 import pytest
 import logging
-import time
-import os
-from flask import Flask
-from services.service_locator import service_locator
 import json
+from services.on_demand.openai_service import OpenAIService
+from services.core.websocket_service import WebSocketService
 
-# Configurar logging
+# Configurar logging con formato personalizado
 logging.basicConfig(
-    level=logging.DEBUG,
-    format='%(message)s'
+    level=logging.INFO,
+    format='%(asctime)s [%(name)s] %(levelname)s: %(message)s',
+    datefmt='%H:%M:%S'
 )
-logger = logging.getLogger(__name__)
+logger = logging.getLogger('test.openai')
 
-# Configuración específica para el test
-TEST_CONFIG = {
-    'model': 'gpt-4o',
-    'temperature': 0.5,
-    'system_prompt': """
-    Eres un asistente personalizado para el usuario.
-    
-    Reglas:
-    1. Sé breve y directo
-    2. actitud ácida
-    """
-}
+def log_section(title: str):
+    """Helper para mostrar secciones en los logs"""
+    logger.info("=" * 50)
+    logger.info(f"📍 {title}")
+    logger.info("=" * 50)
 
-def setup_test_environment():
-    """Configura el entorno de prueba con los datos necesarios"""
-    try:
-        logger.info("\n🔧 Configurando entorno de prueba...")
-        app = Flask(__name__)
-        
-        # 1. Inicializar WebSocket
-        from services.websocket_service import WebSocketService
-        websocket = WebSocketService(app)
-        service_locator.register('websocket', websocket)
-        logger.info("✅ WebSocket service registrado")
-        
-        # 2. Inicializar Storage
-        from services.storage_service import StorageService
-        storage = StorageService(websocket)
-        service_locator.register('storage', storage)
-        logger.info("✅ Storage service registrado")
-        
-        # 3. Configurar datos de prueba
-        install_timestamp = str(int(time.time()))
-        storage.set_value('installTimestamp', install_timestamp)
-        storage.set_value('searchConfig', {})
-        logger.info("✅ Datos de prueba configurados en storage")
-        
-        return websocket
-        
-    except Exception as e:
-        logger.error(f"❌ Error en setup: {str(e)}")
-        raise
+def log_step(step: str, message: str):
+    """Helper para mostrar pasos en los logs"""
+    logger.info(f"[{step}] {message}")
 
-def test_openai_service(data=None, websocket_instance=None):
+def log_error(message: str, error: Exception = None):
+    """Helper para mostrar errores en los logs"""
+    logger.error(f"❌ {message}")
+    if error:
+        logger.error(f"  └─ {type(error).__name__}: {str(error)}")
+
+def log_data(title: str, data: dict):
+    """Helper para mostrar datos de forma estructurada"""
+    logger.info(f"📋 {title}:")
+    for key, value in data.items():
+        if key == 'api_key':
+            # Ocultar API key en logs
+            value = f"{value[:8]}...{value[-4:]}"
+        logger.info(f"  └─ {key}: {value}")
+
+def error_response(message: str, details: dict = None):
+    """Helper para generar respuestas de error"""
+    return {
+        'status': 'error',
+        'message': message,
+        'details': details or {}
+    }
+
+def test_openai_service(data, websocket_instance=None):
     """Test de integración del servicio OpenAI"""
+    log_section("INICIO TEST OPENAI")
+    
     try:
-        logger.info("\n🔍 Iniciando test de OpenAI service...")
-        
-        # 1. Configurar entorno
+        # 1. Validar websocket
+        log_step("1/5", "Validando conexión WebSocket")
         if not websocket_instance:
-            websocket_instance = setup_test_environment()
-        logger.info("✅ Entorno configurado")
+            log_error("No se proporcionó instancia de WebSocket")
+            return error_response("Se requiere instancia de WebSocket")
+
+        # 2. Validar datos de entrada
+        log_step("2/5", "Validando datos de entrada")
+        messages = data.get('messages', [])
+        system_prompt = data.get('systemPrompt')
         
-        # 2. Verificar storage
-        storage = service_locator.get('storage')
-        if not storage:
-            error_msg = "❌ No se pudo obtener Storage service"
-            logger.error(error_msg)
-            return {'status': 'error', 'message': error_msg}
-        logger.info("✅ Storage service obtenido")
+        if not messages:
+            log_error("No se proporcionaron mensajes")
+            return error_response("Se requieren mensajes para procesar")
+
+        # 3. Preparar request
+        log_step("3/5", "Preparando solicitud OpenAI")
+        request_data = {
+            'messages': messages,
+            'model': data.get('model', 'gpt-4o'),
+            'temperature': data.get('temperature', 0.5),
+            'system_prompt': system_prompt
+        }
+        log_data("Datos de solicitud", {
+            'model': request_data['model'],
+            'temperature': request_data['temperature'],
+            'messages_count': len(messages),
+            'last_message': messages[-1]['content'][:50] + '...' if messages else 'N/A'
+        })
             
-        # 3. Verificar datos de prueba
-        if not data:
-            data = {
-                'text': '¿Qué es LOINC?',
-                'history': []
-            }
-        logger.info(f"📦 Datos de prueba: {json.dumps(data, indent=2)}")
+        # 4. Procesar con OpenAI
+        log_step("4/5", "Procesando con OpenAI")
+        openai_service = OpenAIService()
         
-        # 4. Obtener OpenAI service
-        openai_service = service_locator.get('openai')
-        if not openai_service:
-            error_msg = "❌ No se pudo obtener OpenAI service"
-            logger.error(error_msg)
-            return {'status': 'error', 'message': error_msg}
-        logger.info("✅ OpenAI service obtenido")
-            
-        # 5. Verificar datos necesarios
-        text_query = data.get('text')
-        if not text_query:
-            error_msg = "❌ No se proporcionó texto para la consulta"
-            logger.error(error_msg)
-            return {'status': 'error', 'message': error_msg}
+        # Construir historial de chat
+        chat_history = []
+        if system_prompt:
+            chat_history.append({
+                'role': 'system',
+                'content': system_prompt
+            })
+        chat_history.extend(messages)
         
-        chat_history = data.get('history', [])
-        logger.info(f"📝 Query: {text_query}")
-        logger.info(f"📚 History: {len(chat_history)} mensajes")
-        
-        # 6. Inicializar si es necesario
-        if not openai_service.initialized:
-            logger.info("🔄 Inicializando OpenAI service...")
-            if not openai_service.initialize():
-                error_msg = "❌ Error inicializando OpenAI service"
-                logger.error(error_msg)
-                return {'status': 'error', 'message': error_msg}
-            logger.info("✅ OpenAI service inicializado")
-        
-        # 7. Procesar consulta
-        logger.info("🔄 Procesando consulta...")
         response = openai_service.process_query(
-            user_prompt=text_query,
-            chat_history=chat_history,
-            model=TEST_CONFIG['model'],
-            temperature=TEST_CONFIG['temperature'],
-            system_prompt=TEST_CONFIG['system_prompt']
+            user_prompt=messages[-1]['content'],
+            chat_history=chat_history[:-1],  # Excluir último mensaje que ya va en user_prompt
+            model=request_data['model'],
+            temperature=request_data['temperature']
         )
+
+        if not response:
+            log_error("No se obtuvo respuesta de OpenAI")
+            return error_response("Error al procesar con OpenAI")
+
+        # 5. Preparar respuesta
+        log_step("5/5", "Preparando respuesta")
+        result = {
+            'status': 'success',
+            'query': messages[-1]['content'],
+            'response': response,
+            'messages': chat_history + [{
+                'role': 'assistant',
+                'content': response
+            }]
+        }
         
-        if response:
-            logger.info("✅ Respuesta obtenida correctamente")
-            return {
-                'status': 'success',
-                'query': text_query,
-                'response': response
-            }
-        else:
-            error_msg = "❌ No se obtuvo respuesta"
-            logger.error(error_msg)
-            return {
-                'status': 'error',
-                'message': error_msg
-            }
+        logger.info("✅ Test completado exitosamente")
+        return result
         
     except Exception as e:
-        error_msg = f"❌ Error en test: {str(e)}"
-        logger.error(error_msg)
-        return {
-            'status': 'error',
-            'message': str(e)
-        }
+        log_error("Error inesperado en test", e)
+        return error_response(str(e))
+    finally:
+        log_section("FIN TEST OPENAI")
 
-def handle_test_search(data, websocket_instance):
+def handle_test_search(data, websocket_instance=None):
     """Maneja la solicitud de test desde el frontend"""
-    logger.info("\n🔄 Recibida solicitud de test desde frontend")
+    log_section("SOLICITUD TEST OPENAI")
+    logger.info("📥 Datos recibidos del frontend:")
+    logger.info(f"  └─ Mensajes: {len(data.get('messages', []))} mensaje(s)")
     return test_openai_service(data, websocket_instance) 

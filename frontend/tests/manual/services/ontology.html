@@ -174,18 +174,18 @@
             resultsContainer.classList.add('visible');
             console.log('Datos recibidos:', data);
 
-            if (!data || !data.response) {
+            if (!data) {
                 displayError('Respuesta inválida del servidor');
                 return;
             }
 
             const {
-                term_in_english = data.query || '',
+                term_in_english = '',
                 related_terms = [],
                 test_types = [],
                 loinc_codes = {},
                 keywords = []
-            } = data.response;
+            } = data;
 
             // Mostrar término en inglés
             document.getElementById('termInEnglish').textContent = term_in_english;

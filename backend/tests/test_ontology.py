@@ -2,16 +2,33 @@ import pytest
 import logging
 import json
 import re
-from services.ontology_service import ontology_service
-from services.openai_service import OpenAIService
-from services.websocket_service import WebSocketService
+from services.on_demand.ontology_service import ontology_service
+from services.on_demand.openai_service import OpenAIService
+from services.core.websocket_service import WebSocketService
 
-# Configurar logging
+# Configurar logging con formato personalizado
 logging.basicConfig(
-    level=logging.DEBUG,
-    format='%(message)s'
+    level=logging.INFO,
+    format='%(asctime)s [%(name)s] %(levelname)s: %(message)s',
+    datefmt='%H:%M:%S'
 )
-logger = logging.getLogger(__name__)
+logger = logging.getLogger('test.ontology')
+
+def log_section(title: str):
+    """Helper para mostrar secciones en los logs"""
+    logger.info("=" * 50)
+    logger.info(f"📍 {title}")
+    logger.info("=" * 50)
+
+def log_step(step: str, message: str):
+    """Helper para mostrar pasos en los logs"""
+    logger.info(f"[{step}] {message}")
+
+def log_error(message: str, error: Exception = None):
+    """Helper para mostrar errores en los logs"""
+    logger.error(f"❌ {message}")
+    if error:
+        logger.error(f"  └─ {type(error).__name__}: {str(error)}")
 
 def clean_json_response(response: str) -> str:
     """
@@ -20,133 +37,82 @@ def clean_json_response(response: str) -> str:
     2. Elimina los comentarios del JSON
     3. Encuentra el JSON válido
     """
-    # 1. Eliminar bloques de código markdown
-    response = re.sub(r'```json\n|\n```', '', response)
-    
-    # 2. Eliminar comentarios del JSON (// comments)
-    response = re.sub(r'//.*$', '', response, flags=re.MULTILINE)
-    
-    # 3. Encontrar el primer JSON válido
-    json_match = re.search(r'(\{.*\})', response, re.DOTALL)
-    if not json_match:
-        raise ValueError("No se encontró un JSON válido en la respuesta")
+    try:
+        # 1. Eliminar bloques de código markdown
+        response = re.sub(r'```json\n|\n```', '', response)
         
-    json_str = json_match.group(1)
-    
-    # 4. Limpiar espacios extra y líneas vacías
-    json_str = re.sub(r',(\s*[\]}])', r'\1', json_str)
-    
-    return json_str
+        # 2. Eliminar comentarios del JSON (// comments)
+        response = re.sub(r'//.*$', '', response, flags=re.MULTILINE)
+        
+        # 3. Encontrar el primer JSON válido
+        json_match = re.search(r'(\{.*\})', response, re.DOTALL)
+        if not json_match:
+            raise ValueError("No se encontró un JSON válido en la respuesta")
+            
+        json_str = json_match.group(1)
+        
+        # 4. Limpiar espacios extra y líneas vacías
+        json_str = re.sub(r',(\s*[\]}])', r'\1', json_str)
+        
+        return json_str
+    except Exception as e:
+        log_error("Error limpiando JSON", e)
+        raise
+
+def error_response(message: str, details: dict = None):
+    """Helper para generar respuestas de error"""
+    return {
+        'status': 'error',
+        'message': message,
+        'details': details or {}
+    }
 
 def test_ontology_service(data, websocket_instance=None):
     """Test de integración del servicio de ontología"""
-    
-    logger.info("\n🔄 Iniciando test de Ontología...")
-    result = {
-        'status': 'pending',
-        'steps': []
-    }
+    log_section("INICIO TEST ONTOLOGÍA")
     
     try:
+        # 1. Validar websocket
+        log_step("1/4", "Validando conexión WebSocket")
         if not websocket_instance:
-            logger.error("❌ No se proporcionó instancia de WebSocket")
-            return {
-                'status': 'error',
-                'message': 'Se requiere instancia de WebSocket',
-                'details': result
-            }
+            log_error("No se proporcionó instancia de WebSocket")
+            return error_response("Se requiere instancia de WebSocket")
 
-        # 1. Verificar datos en WebSocket
-        logger.info("\n1️⃣ Verificando datos en WebSocket...")
-        logger.info(f"📦 Storage Data: {json.dumps(websocket_instance.storage_data, indent=2)}")
-        
+        # 2. Obtener y validar término
+        log_step("2/4", "Validando término de búsqueda")
         term = data.get('text', '')
         if not term:
-            logger.error("❌ No se proporcionó término a buscar")
-            return {
-                'status': 'error',
-                'message': 'Se requiere término a buscar',
-                'details': result
-            }
+            log_error("Término de búsqueda vacío")
+            return error_response("Se requiere término a buscar")
             
-        # 2. Procesar término
-        logger.info(f"\n2️⃣ Procesando término: {term}")
-        
+        # 3. Procesar término
+        log_step("3/4", f"Procesando término: '{term}'")
         response = ontology_service.process_term(term)
         
         if not response:
-            logger.error("❌ Error al procesar el término")
-            return {
-                'status': 'error',
-                'message': 'Error al procesar el término',
-                'details': result
-            }
+            log_error("Error procesando término")
+            return error_response("Error al procesar el término")
 
-        # 3. Procesar respuesta JSON
-        try:
-            # Log de la respuesta completa
-            logger.info("\n3️⃣ Respuesta de OpenAI:")
-            logger.info("-" * 80)
-            logger.info(response)
-            logger.info("-" * 80)
-
-            # Limpiar y extraer JSON
-            json_str = clean_json_response(response)
-            logger.info("\n4️⃣ JSON limpio:")
-            logger.info("-" * 80)
-            logger.info(json_str)
-            logger.info("-" * 80)
-
-            # Parsear JSON
-            result = json.loads(json_str)
-            
-            # Validar estructura mínima
-            required_fields = ['term_in_english', 'related_terms', 'test_types', 'loinc_codes', 'keywords']
-            missing_fields = [field for field in required_fields if field not in result]
-            
-            if missing_fields:
-                logger.error(f"❌ Faltan campos requeridos: {missing_fields}")
-                return {
-                    'status': 'error',
-                    'message': f'Faltan campos en la respuesta: {", ".join(missing_fields)}',
-                    'details': result
-                }
-
-            # 4. Éxito
-            return {
-                'status': 'success',
-                'query': term,
-                'response': result
-            }
-
-        except json.JSONDecodeError as e:
-            logger.error(f"❌ Error parseando JSON: {e}")
-            logger.error("Respuesta problemática:")
-            logger.error("-" * 80)
-            logger.error(response)
-            logger.error("-" * 80)
-            return {
-                'status': 'error',
-                'message': 'Error al procesar la respuesta',
-                'details': result
-            }
-        except ValueError as e:
-            logger.error(f"❌ Error procesando respuesta: {str(e)}")
-            return {
-                'status': 'error',
-                'message': str(e),
-                'details': result
-            }
+        # 4. Retornar respuesta exitosa
+        log_step("4/4", "Preparando respuesta")
+        result = {
+            'status': 'success',
+            'query': term,
+            'response': response
+        }
+        
+        logger.info("✅ Test completado exitosamente")
+        return result
         
     except Exception as e:
-        logger.error(f"\n❌ Error en test: {str(e)}")
-        return {
-            'status': 'error',
-            'message': str(e),
-            'details': result
-        }
+        log_error("Error inesperado en test", e)
+        return error_response(str(e))
+    finally:
+        log_section("FIN TEST ONTOLOGÍA")
 
 def handle_ontology_search(data, websocket_instance=None):
     """Maneja la solicitud de búsqueda ontológica desde el frontend"""
-    logger.info("\n🔄 Recibida solicitud de búsqueda ontológica desde frontend")
+    log_section("SOLICITUD BÚSQUEDA ONTOLÓGICA")
+    logger.info("📥 Datos recibidos del frontend:")
+    logger.info(f"  └─ Término: {data.get('text', '')}")
     return test_ontology_service(data, websocket_instance) 

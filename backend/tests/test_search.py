@@ -4,209 +4,127 @@ import json
 from services.on_demand.database_search_service import DatabaseSearchService
 from services.core.websocket_service import WebSocketService
 
-# Configurar logging
+# Configurar logging con formato personalizado
 logging.basicConfig(
-    level=logging.DEBUG,
-    format='%(message)s'
+    level=logging.INFO,
+    format='%(asctime)s [%(name)s] %(levelname)s: %(message)s',
+    datefmt='%H:%M:%S'
 )
-logger = logging.getLogger(__name__)
+logger = logging.getLogger('test.search')
+
+def log_section(title: str):
+    """Helper para mostrar secciones en los logs"""
+    logger.info("=" * 50)
+    logger.info(f"📍 {title}")
+    logger.info("=" * 50)
+
+def log_step(step: str, message: str):
+    """Helper para mostrar pasos en los logs"""
+    logger.info(f"[{step}] {message}")
+
+def log_error(message: str, error: Exception = None):
+    """Helper para mostrar errores en los logs"""
+    logger.error(f"❌ {message}")
+    if error:
+        logger.error(f"  └─ {type(error).__name__}: {str(error)}")
+
+def log_data(title: str, data: dict):
+    """Helper para mostrar datos de forma estructurada"""
+    logger.info(f"📋 {title}:")
+    for key, value in data.items():
+        logger.info(f"  └─ {key}: {value}")
+
+def log_results(results: list, limit: int = 3):
+    """Helper para mostrar resultados de búsqueda"""
+    total = len(results)
+    logger.info(f"📊 Resultados encontrados: {total}")
+    if total > 0:
+        logger.info(f"  Mostrando primeros {min(limit, total)} resultados:")
+        for i, result in enumerate(results[:limit], 1):
+            logger.info(f"  {i}. {result.get('loinc_num', 'N/A')} - {result.get('component', 'N/A')}")
+        if total > limit:
+            logger.info(f"  ... y {total - limit} más")
+
+def error_response(message: str, details: dict = None):
+    """Helper para generar respuestas de error"""
+    return {
+        'status': 'error',
+        'message': message,
+        'details': details or {}
+    }
 
 def test_search_service(data, websocket_instance=None):
-    """Test del servicio de búsqueda"""
+    """Test de integración del servicio de búsqueda"""
+    log_section("INICIO TEST BÚSQUEDA")
+    
     try:
-        # Imprimir estado inicial
-        logger.info("\n=== ESTADO INICIAL ===")
-        logger.info(f"Data: {data}")
-        if websocket_instance:
-            logger.info(f"WebSocket Instance: {websocket_instance}")
-            logger.info(f"WebSocket Dir: {dir(websocket_instance)}")
-            if hasattr(websocket_instance, 'storage_data'):
-                logger.info(f"Storage Data: {websocket_instance.storage_data}")
-        else:
-            logger.info("No hay instancia de WebSocket")
-        logger.info("=====================")
+        # 1. Validar websocket
+        log_step("1/5", "Validando conexión WebSocket")
+        if not websocket_instance:
+            log_error("No se proporcionó instancia de WebSocket")
+            return error_response("Se requiere instancia de WebSocket")
 
-        # Crear instancia de SearchService
-        search_service = SearchService(websocket_instance)
+        # 2. Validar datos de entrada
+        log_step("2/5", "Validando datos de entrada")
+        term = data.get('text', '')
+        config = data.get('config', {})
         
-        # Imprimir estado después de inicialización
-        logger.info("\n=== ESTADO DESPUÉS DE INICIALIZACIÓN ===")
-        logger.info(f"SearchService: {search_service}")
-        logger.info(f"SearchService WebSocket: {search_service.websocket}")
-        if hasattr(search_service.websocket, 'storage_data'):
-            logger.info(f"SearchService Storage: {search_service.websocket.storage_data}")
-        logger.info("========================================")
+        if not term:
+            log_error("No se proporcionó término de búsqueda")
+            return error_response("Se requiere término para buscar")
 
-        return {
+        # 3. Preparar configuración
+        log_step("3/5", "Preparando configuración de búsqueda")
+        search_config = {
+            'mode': config.get('mode', 'elastic'),  # elastic o sql
+            'limit': config.get('limit', 100),
+            'fuzzy': config.get('fuzzy', True),
+            'fields': config.get('fields', ['component', 'system']),
+            'sort': config.get('sort', [{'_score': 'desc'}])
+        }
+        log_data("Configuración de búsqueda", search_config)
+            
+        # 4. Ejecutar búsqueda
+        log_step("4/5", f"Buscando término: '{term}'")
+        search_service = DatabaseSearchService()
+        results = search_service.search(
+            term=term,
+            mode=search_config['mode'],
+            limit=search_config['limit'],
+            fuzzy=search_config['fuzzy'],
+            fields=search_config['fields'],
+            sort=search_config['sort']
+        )
+
+        if results is None:
+            log_error("Error ejecutando búsqueda")
+            return error_response("Error al procesar la búsqueda")
+
+        # Logging de resultados
+        log_results(results)
+
+        # 5. Preparar respuesta
+        log_step("5/5", "Preparando respuesta")
+        result = {
             'status': 'success',
-            'message': 'Test completado correctamente'
+            'query': term,
+            'config': search_config,
+            'results': results
         }
+        
+        logger.info("✅ Test completado exitosamente")
+        return result
+        
     except Exception as e:
-        logger.error(f"❌ Error en test: {str(e)}")
-        return {
-            'status': 'error',
-            'message': str(e)
-        }
+        log_error("Error inesperado en test", e)
+        return error_response(str(e))
+    finally:
+        log_section("FIN TEST BÚSQUEDA")
 
-def handle_test_search(data, websocket_instance=None):
-    """Maneja la solicitud de test desde el frontend"""
-    logger.info("\n🔄 Recibida solicitud de test de búsqueda desde frontend")
-    
-    # Imprimir todos los datos disponibles
-    logger.info("\n=== DATOS DEL WEBSOCKET ===")
-    if websocket_instance:
-        logger.info(f"WebSocket Instance: {websocket_instance}")
-        logger.info(f"WebSocket Dir: {dir(websocket_instance)}")
-        if hasattr(websocket_instance, 'storage_data'):
-            logger.info(f"Storage Data: {websocket_instance.storage_data}")
-    else:
-        logger.info("No hay instancia de WebSocket")
-    logger.info(f"Datos recibidos: {data}")
-    logger.info("========================")
-    
-    return test_search_service(data, websocket_instance)
-
-def test_search_service_websocket_data(mocker):
-    """
-    Test para verificar que el SearchService recibe y procesa correctamente 
-    los datos del WebSocket.
-    """
-    # Mock del WebSocket con datos reales
-    mock_websocket = mocker.Mock()
-    mock_websocket.storage_data = {
-        'searchConfig': {
-            'search': {
-                'ontologyMode': 'multi_match',
-                'dbMode': 'elastic',
-                'openai': {
-                    'useOriginalTerm': True,
-                    'useEnglishTerm': True,
-                    'useRelatedTerms': False,
-                    'useTestTypes': False,
-                    'useLoincCodes': False,
-                    'useKeywords': True
-                }
-            },
-            'sql': {
-                'maxTotal': 150,
-                'maxPerKeyword': 100,
-                'maxKeywords': 10,
-                'strictMode': True
-            },
-            'elastic': {
-                'limits': {
-                    'maxTotal': 50,
-                    'maxPerKeyword': 10
-                },
-                'searchTypes': {
-                    'exact': {
-                        'enabled': False,
-                        'priority': 10
-                    },
-                    'fuzzy': {
-                        'enabled': False,
-                        'tolerance': 2
-                    },
-                    'smart': {
-                        'enabled': False,
-                        'precision': 7
-                    }
-                },
-                'showAdvanced': False
-            },
-            'performance': {
-                'maxCacheSize': 100,
-                'cacheExpiry': 24
-            }
-        },
-        'openaiApiKey': 'ns3/ijEIzdGksu14L6XNWyvN2a0HYog7RTSgEf6aPZWeA8HHr6xoSGa8a/DlXl3pUwPfHNg82AbpRKCLaB3YDEdpz3ZnsbaWOJGefI3Ly/m4RfalmRn1wg4WFmdEtj8j5p5Hv63lAo53DCi2Sc2Qs0gFlvfemoAQfByT39H+l2auxQ8GQ/K4eEQQ6BYq6eMC1+HuFBpEtrZ9hHekVVe/dG7rZtnJpwILljBiDnx+K8GPD+Kmg5m0hVHTdap1mE/Hj3sCvvYmZsEr7XbWRfnO0Q==',
-        'installTimestamp': '1734996906305'
-    }
-
-    # Log de datos iniciales
-    logger.info("\n=== DATOS INICIALES DEL WEBSOCKET ===")
-    logger.info(json.dumps(mock_websocket.storage_data, indent=2))
-    logger.info("=====================================")
-
-    # Crear instancia de SearchService con el mock
-    search_service = SearchService(mock_websocket)
-    
-    # Verificar inicialización
-    assert search_service.websocket is not None, "WebSocket no inicializado"
-    assert search_service.websocket.storage_data is not None, "Storage data no disponible"
-    
-    # Verificar que puede obtener la configuración
-    user_id = "test_user"
-    success = search_service.initialize_user_config(user_id)
-    
-    # Log del resultado
-    logger.info("\n=== RESULTADO DE INICIALIZACIÓN ===")
-    logger.info(f"Success: {success}")
-    if user_id in search_service._user_configs:
-        logger.info(f"User Config: {json.dumps(search_service._user_configs[user_id], indent=2)}")
-    logger.info("=================================")
-    
-    assert success, "No se pudo inicializar la configuración del usuario"
-    
-    # Verificar que la configuración se guardó correctamente
-    user_config = search_service._user_configs.get(user_id)
-    assert user_config is not None, "Configuración de usuario no guardada"
-    assert user_config['preferred_service'] == 'elastic', "Servicio preferido incorrecto"
-    
-    # Verificar que el servicio preferido se obtiene correctamente
-    service = search_service.get_user_preference(user_id)
-    assert service == 'elastic', "Servicio preferido no coincide"
-
-def test_search_service_invalid_websocket_data(mocker):
-    """
-    Test para verificar el manejo de datos inválidos del WebSocket.
-    """
-    # Mock del WebSocket con datos inválidos
-    mock_websocket = mocker.Mock()
-    mock_websocket.storage_data = {
-        'searchConfig': {
-            'value': {
-                'search': {
-                    'dbMode': 'invalid_mode'  # Modo inválido
-                }
-            }
-        }
-    }
-
-    # Crear instancia de SearchService con el mock
-    search_service = SearchService(mock_websocket)
-    
-    # Verificar que maneja correctamente datos inválidos
-    user_id = "test_user"
-    success = search_service.initialize_user_config(user_id)
-    assert not success, "Debería fallar con modo inválido"
-    
-    # Verificar que usa el servicio por defecto
-    service = search_service.get_user_preference(user_id)
-    assert service == 'sql', "No está usando el servicio por defecto"
-    
-    # Log del resultado para debug
-    logger.debug(f"✅ Servicio por defecto usado correctamente: {service}")
-
-def test_search_service_missing_websocket_data(mocker):
-    """
-    Test para verificar el manejo de datos faltantes del WebSocket.
-    """
-    # Mock del WebSocket sin datos
-    mock_websocket = mocker.Mock()
-    mock_websocket.storage_data = {}
-
-    # Crear instancia de SearchService con el mock
-    search_service = SearchService(mock_websocket)
-    
-    # Verificar que maneja correctamente datos faltantes
-    user_id = "test_user"
-    success = search_service.initialize_user_config(user_id)
-    assert not success, "Debería fallar con datos faltantes"
-    
-    # Verificar que usa el servicio por defecto
-    service = search_service.get_user_preference(user_id)
-    assert service == 'sql', "No está usando el servicio por defecto"
-    
-    # Log del resultado para debug
-    logger.debug(f"✅ Manejo correcto de datos faltantes, usando servicio: {service}") 
+def handle_search(data, websocket_instance=None):
+    """Maneja la solicitud de búsqueda desde el frontend"""
+    log_section("SOLICITUD DE BÚSQUEDA")
+    logger.info("📥 Datos recibidos del frontend:")
+    logger.info(f"  └─ Término: {data.get('text', '')}")
+    logger.info(f"  └─ Modo: {data.get('config', {}).get('mode', 'elastic')}")
+    return test_search_service(data, websocket_instance) 

@@ -24,7 +24,7 @@ class DatabaseSearchService(LazyLoadService):
             return
             
         super().__init__()
-        logger.info("🔍 Inicializando SearchService")
+        logger.info("🔍 Inicializando DatabaseSearchService")
         
         try:
             self._elastic_service = None
@@ -61,6 +61,9 @@ class DatabaseSearchService(LazyLoadService):
         if self._elastic_service is None:
             logger.debug("🔄 Lazy loading de ElasticService...")
             self._elastic_service = ElasticService()
+            if not self._elastic_service.initialized:
+                logger.error("❌ Error inicializando ElasticService")
+                return None
             logger.debug("✅ ElasticService cargado")
         return self._elastic_service
 
@@ -70,8 +73,98 @@ class DatabaseSearchService(LazyLoadService):
         if self._sql_service is None:
             logger.debug("🔄 Lazy loading de SQLService...")
             self._sql_service = SQLService()
+            if not self._sql_service.initialized:
+                logger.error("❌ Error inicializando SQLService")
+                return None
             logger.debug("✅ SQLService cargado")
         return self._sql_service
+
+    def search_loinc(self, query: str, user_id: str, limit: int = 10) -> Dict:
+        """
+        Realiza una búsqueda usando el servicio configurado por el usuario.
+        """
+        try:
+            if not self.initialized:
+                logger.error("❌ Servicio no inicializado")
+                return None
+
+            # 1. Validación inicial
+            logger.info("\n🔍 BÚSQUEDA LOINC")
+            logger.info("├── Query: %s", query)
+            logger.info("└── Usuario: %s", user_id)
+            
+            if not self.storage:
+                logger.error("❌ Storage service no disponible")
+                return {'error': 'Storage service no disponible'}
+            
+            # 2. Configuración
+            service = self.get_user_preference(user_id)
+            logger.info("\n⚙️ CONFIGURACIÓN")
+            logger.info("├── Servicio: %s", service)
+            
+            search_config = self.storage.get_value('searchConfig') or {}
+            config = {
+                'search': search_config.get('search', {}),
+                'elastic': search_config.get('elastic', {}),
+                'sql': search_config.get('sql', {})
+            }
+            
+            # 3. Ejecución búsqueda
+            logger.info("\n🔎 EJECUTANDO BÚSQUEDA")
+            results = []
+            error = None
+            
+            self._service_stats[service]['requests'] += 1
+            self._service_stats[service]['last_request'] = time.strftime('%Y-%m-%d %H:%M:%S')
+            
+            try:
+                if service == 'elastic':
+                    if not self.elastic_service:
+                        raise Exception("ElasticService no disponible")
+                    results = self.elastic_service.search_loinc(query, limit)
+                else:  # sql
+                    if not self.sql_service:
+                        raise Exception("SQLService no disponible")
+                    results = self.sql_service.search_loinc(query, limit)
+                    
+                logger.info("├── Estado: ✅ Completada")
+                logger.info("└── Resultados: %d", len(results))
+                
+            except Exception as e:
+                error = str(e)
+                self._service_stats[service]['errors'] += 1
+                logger.error("├── Estado: ❌ Error: %s", e)
+                
+                # Fallback
+                fallback_service = 'sql' if service == 'elastic' else 'elastic'
+                logger.info("└── Intentando fallback: %s", fallback_service)
+                try:
+                    if fallback_service == 'elastic' and self.elastic_service:
+                        results = self.elastic_service.search_loinc(query, limit)
+                    elif fallback_service == 'sql' and self.sql_service:
+                        results = self.sql_service.search_loinc(query, limit)
+                except Exception as fallback_error:
+                    logger.error("    └── ❌ Error en fallback: %s", fallback_error)
+
+            # 4. Respuesta
+            response = {
+                'results': results,
+                'count': len(results),
+                'service': service,
+                'error': error,
+                'config': config
+            }
+            
+            if error:
+                logger.info("\n📤 RESPUESTA (con errores)")
+            else:
+                logger.info("\n📤 RESPUESTA")
+                logger.debug("└── %s", json.dumps(response, indent=2))
+            return response
+
+        except Exception as e:
+            logger.error("❌ Error general: %s", e)
+            return {'error': str(e)}
 
     def get_user_preference(self, user_id: str) -> str:
         """
@@ -79,30 +172,27 @@ class DatabaseSearchService(LazyLoadService):
         """
         try:
             if not self.storage:
-                logger.error("❌ No se pudo obtener StorageService")
+                logger.error("❌ Storage service no disponible")
                 return self._default_service
 
-            # Obtener configuración del usuario
-            config = self.storage.get_user_config(user_id)
-            service = config.get('search', {}).get('dbMode', self._default_service)
+            # Obtener y validar configuración
+            search_config = self.storage.get_value('searchConfig') or {}
+            service = search_config.get('search', {}).get('dbMode', self._default_service)
             
-            # Validar servicio
             if service not in ['elastic', 'sql']:
-                logger.warning(f"⚠️ Servicio inválido {service}, usando default")
+                logger.warning("⚠️ Servicio '%s' inválido, usando '%s'", service, self._default_service)
                 return self._default_service
 
+            logger.debug("⚙️ Servicio configurado: %s", service)
             return service
 
         except Exception as e:
-            logger.error(f"❌ Error obteniendo preferencia: {e}")
+            logger.error("❌ Error obteniendo preferencia: %s", e)
             return self._default_service
 
     def get_service_status(self, user_id: str = None) -> Dict:
         """
         Obtiene el estado de los servicios.
-        
-        Args:
-            user_id: Identificador del usuario
         """
         status = {
             'services': {
@@ -113,89 +203,42 @@ class DatabaseSearchService(LazyLoadService):
         
         # Si tenemos usuario, obtener su configuración
         if user_id and self.storage:
-            status['user_config'] = self.storage.get_user_config(user_id)
+            search_config = self.storage.get_value('searchConfig') or {}
+            status['user_config'] = {
+                'search': search_config.get('search', {}),
+                'elastic': search_config.get('elastic', {}),
+                'sql': search_config.get('sql', {})
+            }
         
         # Verificar Elasticsearch
         try:
-            elastic_stats = self.elastic_service.get_stats()
-            status['services']['elastic'] = {
-                'available': True,
-                'stats': {
-                    **elastic_stats,
-                    **self._service_stats['elastic']
+            if self.elastic_service:
+                elastic_stats = self.elastic_service.get_stats()
+                status['services']['elastic'] = {
+                    'available': True,
+                    'stats': {
+                        **elastic_stats,
+                        **self._service_stats['elastic']
+                    }
                 }
-            }
         except Exception as e:
             logger.warning(f"Elasticsearch no disponible: {e}")
         
         # Verificar SQLite
         try:
-            sql_stats = self.sql_service.get_stats()
-            status['services']['sql'] = {
-                'available': True,
-                'stats': {
-                    **sql_stats,
-                    **self._service_stats['sql']
+            if self.sql_service:
+                sql_stats = self.sql_service.get_stats()
+                status['services']['sql'] = {
+                    'available': True,
+                    'stats': {
+                        **sql_stats,
+                        **self._service_stats['sql']
+                    }
                 }
-            }
         except Exception as e:
             logger.warning(f"SQLite no disponible: {e}")
 
         return status
-
-    def search_loinc(self, query: str, user_id: str, limit: int = 10) -> Dict:
-        """
-        Realiza una búsqueda usando el servicio configurado por el usuario.
-        """
-        logger.info("\n1️⃣ Iniciando búsqueda...")
-        logger.info(f"📝 Query: {query}")
-        logger.info(f"👤 Usuario: {user_id}")
-        
-        if not self.storage:
-            logger.error("❌ No se pudo obtener StorageService")
-            return {'error': 'Storage service no disponible'}
-        
-        # Obtener servicio preferido
-        service = self.get_user_preference(user_id)
-        logger.info(f"\n2️⃣ Servicio seleccionado: {service}")
-        
-        # Obtener configuración actual
-        config = self.storage.get_user_config(user_id)
-        logger.info(f"📦 Configuración actual:")
-        logger.info(json.dumps(config, indent=2))
-        
-        results = []
-        error = None
-        
-        # Actualizar estadísticas
-        self._service_stats[service]['requests'] += 1
-        self._service_stats[service]['last_request'] = time.strftime('%Y-%m-%d %H:%M:%S')
-        
-        try:
-            logger.info(f"\n3️⃣ Ejecutando búsqueda con {service}...")
-            if service == 'elastic':
-                results = self.elastic_service.search_loinc(query, limit)
-            else:  # sql
-                results = self.sql_service.search_loinc(query, limit)
-                
-            logger.info(f"✅ Búsqueda completada: {len(results)} resultados")
-            
-        except Exception as e:
-            error = str(e)
-            self._service_stats[service]['errors'] += 1
-            logger.error(f"❌ Error en búsqueda con {service}: {e}")
-
-        response = {
-            'results': results,
-            'count': len(results),
-            'service': service,
-            'error': error,
-            'config': config
-        }
-        
-        logger.info("\n4️⃣ Respuesta final:")
-        logger.info(json.dumps(response, indent=2))
-        return response
 
     def bulk_insert_docs(self, docs: List[Dict], user_id: str) -> Dict:
         """
@@ -224,3 +267,6 @@ class DatabaseSearchService(LazyLoadService):
             logger.error(f"Error en inserción con {service}: {e}")
             
         return status 
+
+# Instancia global
+database_search_service = DatabaseSearchService() 

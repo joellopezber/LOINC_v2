@@ -35,6 +35,17 @@ export class OntologyTester {
             this.isConnected = false;
             this.onConnectionChange?.(false);
         });
+
+        // Escuchar respuestas de búsqueda ontológica
+        this.socket.on('ontology.search_result', (response) => {
+            console.log('📩 Respuesta recibida:', response);
+            if (response.status === 'success') {
+                this.onSearchResult?.(response.response);
+            } else {
+                const error = new Error(response.message || 'Error desconocido');
+                this.onError?.(error);
+            }
+        });
     }
 
     async search(query) {
@@ -43,21 +54,7 @@ export class OntologyTester {
         }
 
         console.log('🔍 Buscando:', query);
-
-        return new Promise((resolve, reject) => {
-            this.socket.emit('ontology.search', { text: query }, (response) => {
-                console.log('📩 Respuesta recibida:', response);
-
-                if (response.status === 'success') {
-                    this.onSearchResult?.(response);
-                    resolve(response);
-                } else {
-                    const error = new Error(response.message || 'Error desconocido');
-                    this.onError?.(error);
-                    reject(error);
-                }
-            });
-        });
+        this.socket.emit('ontology.search', { text: query });
     }
 
     disconnect() {

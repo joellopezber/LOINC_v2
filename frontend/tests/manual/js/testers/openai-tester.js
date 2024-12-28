@@ -2,7 +2,7 @@ export class OpenAITester {
     constructor() {
         this.socket = null;
         this.messages = [];
-        this.systemPrompt = "Eres un asistente médico experto en LOINC. Ayudas a los usuarios a entender términos médicos y pruebas de laboratorio.";
+        this.systemPrompt = null;
         this.isConnected = false;
         this.onConnectionChange = null;
         this.onMessageReceived = null;

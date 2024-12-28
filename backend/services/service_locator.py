@@ -51,23 +51,41 @@ class ServiceLocator:
         Returns:
             WebSocketService: Instancia del servicio WebSocket
         """
-        # 1. Servicios de seguridad
-        from .core.master_key_service import master_key_service
-        from .core.encryption_service import encryption_service
-        self.register('master_key', master_key_service)
-        self.register('encryption', encryption_service)
-        
-        # 2. Servicios de comunicación
-        from .core.websocket_service import WebSocketService
-        websocket = WebSocketService(app)
-        self.register('websocket', websocket)
-        
-        # 3. Servicios de datos
-        from .core.storage_service import StorageService
-        storage = StorageService()
-        self.register('storage', storage)
-        
-        return websocket
+        try:
+            # 1. Servicios de seguridad
+            from .core.master_key_service import master_key_service
+            from .core.encryption_service import encryption_service
+            self.register('master_key', master_key_service)
+            self.register('encryption', encryption_service)
+            logger.info("✅ Servicios de seguridad inicializados")
+            
+            # 2. Servicios de comunicación
+            from .core.websocket_service import WebSocketService
+            websocket = WebSocketService(app)
+            self.register('websocket', websocket)
+            logger.info("✅ Servicios de comunicación inicializados")
+            
+            # 3. Servicios de datos
+            from .core.storage_service import StorageService
+            storage = StorageService()
+            self.register('storage', storage)
+            logger.info("✅ Servicios de datos inicializados")
+            
+            # 4. Servicios on demand
+            from .on_demand.openai_service import OpenAIService
+            from .on_demand.ontology_service import ontology_service
+            from .on_demand.database_search_service import database_search_service
+            openai = OpenAIService(websocket)
+            self.register('openai', openai)
+            self.register('ontology', ontology_service)
+            self.register('database_search', database_search_service)
+            logger.info("✅ Servicios on demand inicializados")
+            
+            return websocket
+            
+        except Exception as e:
+            logger.error(f"❌ Error inicializando servicios core: {str(e)}")
+            raise
     
     def register(self, name: str, service: Any) -> bool:
         """

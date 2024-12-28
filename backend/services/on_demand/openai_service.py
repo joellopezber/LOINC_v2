@@ -16,7 +16,7 @@ DEFAULT_SYSTEM_PROMPT = """Responde la pregunta del usuario de manera clara y co
 class OpenAIService(LazyLoadService):
     _instance = None
 
-    def __new__(cls):
+    def __new__(cls, socketio=None):
         if cls._instance is None:
             cls._instance = super(OpenAIService, cls).__new__(cls)
         return cls._instance
@@ -63,10 +63,13 @@ class OpenAIService(LazyLoadService):
                 logger.error("❌ Credenciales no encontradas en storage")
                 return None
 
-            # Desencriptar API key
-            from .encryption_service import encryption_service
-            api_key = encryption_service.decrypt(encrypted_key, install_timestamp)
+            # Desencriptar API key usando el servicio de encriptación
+            encryption_service = service_locator.get('encryption')
+            if not encryption_service:
+                logger.error("❌ No se pudo obtener encryption service")
+                return None
 
+            api_key = encryption_service.decrypt(encrypted_key, install_timestamp)
             if not api_key:
                 logger.error("❌ Error desencriptando API key")
                 return None
@@ -115,10 +118,6 @@ class OpenAIService(LazyLoadService):
         Returns:
             Respuesta de OpenAI o None si hay error
         """
-        if not self.initialized and not self.initialize():
-            logger.error("❌ Servicio no inicializado")
-            return None
-
         if not user_prompt:
             logger.error("❌ Se requiere user_prompt")
             return None
@@ -129,6 +128,15 @@ class OpenAIService(LazyLoadService):
             logger.info(f"📝 Prompt: {user_prompt[:50]}...")
             logger.info(f"🤖 Modelo: {model}")
             logger.info(f"🌡️ Temperatura: {temperature}")
+            
+            # Inicializar cliente si es necesario
+            if not self.client:
+                api_key = self._get_credentials()
+                if not api_key:
+                    logger.error("❌ No se pudieron obtener credenciales")
+                    return None
+                self.client = OpenAI(api_key=api_key)
+                logger.info("✅ Cliente OpenAI inicializado")
             
             # Construir mensajes
             messages = [{"role": "system", "content": system_prompt}]

@@ -18,11 +18,11 @@ def get_search_service():
     Returns:
         DatabaseSearchService: Instancia del servicio
     """
-    search_service = service_locator.get('search')
+    search_service = service_locator.get('database_search')
     if not search_service:
-        logger.info("🔄 Creando nueva instancia de SearchService")
+        logger.info("🔄 Creando nueva instancia de DatabaseSearchService")
         search_service = DatabaseSearchService()
-        service_locator.register('search', search_service)
+        service_locator.register('database_search', search_service)
     return search_service
 
 def init_socket_routes(socketio, search_service=None):
@@ -45,6 +45,36 @@ def init_socket_routes(socketio, search_service=None):
     def handle_disconnect():
         """Maneja desconexión WebSocket"""
         logger.info(f"👋 Desconexión: {request.sid}")
+
+    @socketio.on('openai.test_search')
+    def handle_openai_test(data):
+        """Maneja solicitudes de test de OpenAI"""
+        try:
+            from tests.test_openai import handle_test_search
+            logger.info(f"🤖 Test OpenAI recibido: {data}")
+            result = handle_test_search(data, socketio)
+            emit('openai.test_result', result)
+        except Exception as e:
+            logger.error(f"❌ Error en test OpenAI: {str(e)}")
+            emit('openai.test_result', {
+                'status': 'error',
+                'message': str(e)
+            })
+
+    @socketio.on('ontology.search')
+    def handle_ontology_search(data):
+        """Maneja solicitudes de búsqueda ontológica"""
+        try:
+            from tests.test_ontology import handle_ontology_search
+            logger.info(f"🔍 Búsqueda ontológica recibida: {data}")
+            result = handle_ontology_search(data, socketio)
+            emit('ontology.search_result', result)
+        except Exception as e:
+            logger.error(f"❌ Error en búsqueda ontológica: {str(e)}")
+            emit('ontology.search_result', {
+                'status': 'error',
+                'message': str(e)
+            })
 
     @socketio.on('search')
     def handle_search(data):
