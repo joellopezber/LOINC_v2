@@ -3,11 +3,12 @@ import logging
 import time
 from .encryption_service import encryption_service
 from ..service_locator import service_locator
+from .lazy_load_service import LazyLoadService, lazy_load
 import json
 
 logger = logging.getLogger(__name__)
 
-class StorageService:
+class StorageService(LazyLoadService):
     _instance = None
     
     def __new__(cls):
@@ -17,27 +18,30 @@ class StorageService:
 
     def __init__(self):
         """Inicializa el servicio de almacenamiento"""
-        if hasattr(self, 'initialized'):
+        if hasattr(self, '_initialized'):
             return
             
+        super().__init__()
         logger.info("💾 Inicializando Storage service...")
-        self.storage_data = {
-            'searchConfig': {},
-            'openaiApiKey': None,
-            'installTimestamp': None
-        }
-        self.last_values = {}
-        self._websocket = None
-        self.initialized = True
-        logger.info("✅ Storage service inicializado")
+        
+        try:
+            self.storage_data = {
+                'searchConfig': {},
+                'openaiApiKey': None,
+                'installTimestamp': None
+            }
+            self.last_values = {}
+            self._websocket = None
+            self._set_initialized(True)
+            
+        except Exception as e:
+            self._set_initialized(False, str(e))
+            raise
 
     @property
+    @lazy_load('websocket')
     def websocket(self):
         """Obtiene el WebSocketService de forma lazy"""
-        if self._websocket is None:
-            self._websocket = service_locator.get('websocket')
-            if not self._websocket:
-                logger.error("❌ WebSocketService no encontrado")
         return self._websocket
 
     def emit_update(self, key: str, value: Any):

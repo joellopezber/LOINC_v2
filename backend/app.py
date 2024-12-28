@@ -32,20 +32,8 @@ def create_app():
 def init_services(app):
     """Inicializa los servicios core de la aplicación"""
     try:
-        logger.info("🚀 Iniciando servicios core...")
-        
-        # 1. Limpiar servicios anteriores
-        service_locator.clear()
-        
-        # 2. Inicializar WebSocket (necesario para la comunicación)
-        websocket = WebSocketService(app)
-        service_locator.register('websocket', websocket)
-        
-        # 3. Inicializar Storage (necesario para datos)
-        storage = StorageService()
-        service_locator.register('storage', storage)
-        
-        logger.info("✅ Servicios core inicializados")
+        # Inicializar todos los servicios core usando el service_locator
+        websocket = service_locator.initialize_core_services(app)
         return websocket
         
     except Exception as e:
@@ -60,7 +48,7 @@ def register_routes(app, websocket):
     if os.environ.get('FLASK_ENV') == 'development':
         app.register_blueprint(test_routes)
     
-    init_socket_routes(websocket.socketio, service_locator.get('search'))
+    init_socket_routes(websocket.socketio)
 
 def run_server(app, websocket):
     """Inicia el servidor según el entorno"""

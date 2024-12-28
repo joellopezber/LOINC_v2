@@ -2,10 +2,11 @@ import logging
 import os
 import hashlib
 from typing import Optional
+from ..lazy_load_service import LazyLoadService
 
 logger = logging.getLogger(__name__)
 
-class MasterKeyService:
+class MasterKeyService(LazyLoadService):
     _instance = None
     
     def __new__(cls):
@@ -15,18 +16,26 @@ class MasterKeyService:
 
     def __init__(self):
         """Inicializa el servicio de master key"""
-        if hasattr(self, 'initialized'):
+        if hasattr(self, '_initialized'):
             return
             
+        super().__init__()
         logger.info("🔐 Inicializando MasterKey service...")
-        self.salt_master_key = os.environ.get('SALT_MASTER_KEY')
         
-        if not self.salt_master_key:
-            logger.error("❌ SALT_MASTER_KEY no encontrada en variables de entorno")
-        else:
+        try:
+            self.salt_master_key = os.environ.get('SALT_MASTER_KEY')
+            
+            if not self.salt_master_key:
+                error_msg = "❌ SALT_MASTER_KEY no encontrada en variables de entorno"
+                self._set_initialized(False, error_msg)
+                raise ValueError(error_msg)
+                
+            self._set_initialized(True)
             logger.info("✅ SALT_MASTER_KEY cargada correctamente")
             
-        self.initialized = True
+        except Exception as e:
+            self._set_initialized(False, str(e))
+            raise
 
     def get_key_for_install(self, install_timestamp: str) -> Optional[str]:
         """
@@ -65,7 +74,7 @@ class MasterKeyService:
             key_bytes = kdf.derive(timestamp_bytes)
             master_key = key_bytes.hex()
             
-            logger.info("✅ Master key generada correctamente")
+            logger.debug("✅ Master key generada correctamente")
             return master_key
 
         except Exception as e:

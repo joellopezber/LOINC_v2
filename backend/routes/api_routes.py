@@ -3,6 +3,7 @@ from services.on_demand.database_search_service import DatabaseSearchService
 import logging
 from flask_socketio import emit
 from datetime import datetime
+from services.service_locator import service_locator
 
 # Configurar logging
 logger = logging.getLogger(__name__)
@@ -10,13 +11,27 @@ logger = logging.getLogger(__name__)
 # Crear Blueprint para rutas API
 api_routes = Blueprint('api_routes', __name__)
 
-def init_socket_routes(socketio, search_service):
+def get_search_service():
+    """
+    Obtiene o crea el servicio de búsqueda de forma lazy
+    
+    Returns:
+        DatabaseSearchService: Instancia del servicio
+    """
+    search_service = service_locator.get('search')
+    if not search_service:
+        logger.info("🔄 Creando nueva instancia de SearchService")
+        search_service = DatabaseSearchService()
+        service_locator.register('search', search_service)
+    return search_service
+
+def init_socket_routes(socketio, search_service=None):
     """
     Inicializa las rutas de WebSocket.
     
     Args:
         socketio: Instancia de SocketIO
-        search_service: Instancia de DatabaseSearchService
+        search_service: Instancia opcional de DatabaseSearchService
     """
     logger.info("🚀 Inicializando rutas de WebSocket")
 
@@ -47,6 +62,9 @@ def init_socket_routes(socketio, search_service):
 
             query = data['query']
             user_id = data.get('user_id', request.sid)
+            
+            # Obtener servicio de forma lazy
+            search_service = get_search_service()
             
             results = search_service.search_loinc(query, user_id)
             

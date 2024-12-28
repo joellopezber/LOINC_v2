@@ -6,6 +6,7 @@ import logging
 from .encryption_service import encryption_service
 from .master_key_service import master_key_service
 from ..service_locator import service_locator
+from .lazy_load_service import LazyLoadService, lazy_load
 
 # Configurar logging
 logging.basicConfig(level=logging.DEBUG)
@@ -13,21 +14,27 @@ logger = logging.getLogger(__name__)
 
 eventlet.monkey_patch()
 
-class WebSocketService:
+class WebSocketService(LazyLoadService):
     def __init__(self, app):
         """Inicializa el servicio WebSocket"""
+        super().__init__()
         logger.info("🔌 Inicializando WebSocket")
-        self.app = app
-        self.socketio = SocketIO(app, cors_allowed_origins="*")
-        self._storage = None
-        self._setup_handlers()
-        logger.info("✅ WebSocket inicializado")
         
+        try:
+            self.app = app
+            self.socketio = SocketIO(app, cors_allowed_origins="*")
+            self._storage = None
+            self._setup_handlers()
+            self._set_initialized(True)
+            
+        except Exception as e:
+            self._set_initialized(False, str(e))
+            raise
+    
     @property
+    @lazy_load('storage')
     def storage(self):
         """Obtiene el StorageService de forma lazy"""
-        if self._storage is None:
-            self._storage = service_locator.get('storage')
         return self._storage
 
     def _setup_handlers(self):

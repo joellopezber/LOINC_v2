@@ -6,60 +6,42 @@ import os
 import logging
 import base64
 import traceback
-from dotenv import load_dotenv
-from pathlib import Path
 from typing import Optional
+from ..lazy_load_service import LazyLoadService, lazy_load
 
 # Configurar logging
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Obtener el directorio raíz del proyecto (2 niveles arriba desde este archivo)
-ROOT_DIR = Path(__file__).resolve().parent.parent.parent
+class EncryptionService(LazyLoadService):
+    _instance = None
 
-# Cargar variables de entorno desde el directorio raíz
-load_dotenv(ROOT_DIR / '.env')
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super(EncryptionService, cls).__new__(cls)
+        return cls._instance
 
-class EncryptionService:
     def __init__(self):
         """Inicializa el servicio de encriptación"""
-        logger.info("Inicializando encryption service...")
-        
-        # Obtener el salt del archivo .env
-        env_salt = os.getenv('SALT_MASTER_KEY')
-        if not env_salt:
-            logger.error("❌ SALT_MASTER_KEY no encontrado en .env")
-            raise ValueError("SALT_MASTER_KEY debe estar configurado en el archivo .env")
+        if hasattr(self, '_initialized'):
+            return
             
-        # Convertir el salt hexadecimal a bytes
+        super().__init__()
+        logger.info("🔐 Inicializando Encryption service...")
+        
         try:
-            self.server_salt = bytes.fromhex(env_salt)
-            logger.info("✅ SALT_MASTER_KEY cargado correctamente")
-        except ValueError as e:
-            logger.error("❌ Error al decodificar SALT_MASTER_KEY: debe ser una cadena hexadecimal válida")
-            raise ValueError("SALT_MASTER_KEY debe ser una cadena hexadecimal válida") from e
+            self.install_keys = {}  # Diccionario para almacenar claves por installTimestamp
+            self._master_key_service = None
+            self._set_initialized(True)
             
-        self.install_keys = {}  # Diccionario para almacenar claves por installTimestamp
-    
-    def generate_deterministic_key(self, install_timestamp):
-        """
-        Genera una master key determinista basada en el installTimestamp.
-        Usa PBKDF2 para derivar una clave segura y la devuelve en formato hexadecimal.
-        """
-        # Convertir timestamp a bytes
-        timestamp_bytes = str(install_timestamp).encode()
-        
-        # Usar PBKDF2 para derivar una clave segura
-        kdf = PBKDF2HMAC(
-            algorithm=hashes.SHA256(),
-            length=32,  # 32 bytes = 256 bits
-            salt=self.server_salt,
-            iterations=100000,
-        )
-        
-        # Derivar la clave y convertirla a hexadecimal
-        key_bytes = kdf.derive(timestamp_bytes)
-        return key_bytes.hex()
+        except Exception as e:
+            self._set_initialized(False, str(e))
+            raise
+
+    @property
+    @lazy_load('master_key')
+    def master_key_service(self):
+        """Obtiene el MasterKeyService de forma lazy"""
+        return self._master_key_service
 
     def get_key_for_install(self, install_timestamp):
         """
@@ -67,8 +49,12 @@ class EncryptionService:
         La clave se genera de forma determinista basada en el installTimestamp.
         """
         if install_timestamp not in self.install_keys:
-            # Generar la clave de forma determinista
-            self.install_keys[install_timestamp] = self.generate_deterministic_key(install_timestamp)
+            # Obtener la clave del master_key_service
+            if not self.master_key_service:
+                logger.error("❌ MasterKeyService no disponible")
+                return None
+                
+            self.install_keys[install_timestamp] = self.master_key_service.get_key_for_install(install_timestamp)
         
         return self.install_keys[install_timestamp]
 
@@ -99,6 +85,9 @@ class EncryptionService:
                 
             # Obtener master key
             master_key = self.get_key_for_install(install_timestamp)
+            if not master_key:
+                logger.error("❌ No se pudo obtener master key")
+                return None
             
             # Generar salt y IV aleatorios
             salt = os.urandom(16)
@@ -138,8 +127,7 @@ class EncryptionService:
                 return None
 
             # 1. Obtener master key
-            from .master_key_service import master_key_service
-            master_key = master_key_service.get_key_for_install(install_timestamp)
+            master_key = self.get_key_for_install(install_timestamp)
             if not master_key:
                 logger.error("❌ No se pudo obtener la master key")
                 return None
@@ -153,13 +141,7 @@ class EncryptionService:
             content = decoded_data[28:]
             
             # 4. Derivar clave específica usando HKDF
-            hkdf = HKDF(
-                algorithm=hashes.SHA256(),
-                length=32,
-                salt=salt,
-                info=b'',
-            )
-            key = hkdf.derive(bytes.fromhex(master_key))
+            key = self._derive_key(salt, master_key)
             
             # 5. Desencriptar usando AES-GCM
             aesgcm = AESGCM(key)

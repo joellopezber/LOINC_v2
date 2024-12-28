@@ -4,12 +4,13 @@ import time
 from .elastic_service import ElasticService
 from .sql_service import SQLService
 from ..service_locator import service_locator
+from ..core.lazy_load_service import LazyLoadService, lazy_load
 import json
 
 # Configurar logging
 logger = logging.getLogger(__name__)
 
-class DatabaseSearchService:
+class DatabaseSearchService(LazyLoadService):
     _instance = None
 
     def __new__(cls):
@@ -19,53 +20,58 @@ class DatabaseSearchService:
 
     def __init__(self):
         """Inicializa los servicios de búsqueda en base de datos de forma lazy"""
-        if hasattr(self, 'initialized'):
+        if hasattr(self, '_initialized'):
             return
             
+        super().__init__()
         logger.info("🔍 Inicializando SearchService")
-        self._elastic_service = None
-        self._sql_service = None
-        self._storage = None
-        self._default_service = 'sql'
-        self._service_stats = {
-            'elastic': {
-                'requests': 0,
-                'errors': 0,
-                'last_request': None
-            },
-            'sql': {
-                'requests': 0,
-                'errors': 0,
-                'last_request': None
+        
+        try:
+            self._elastic_service = None
+            self._sql_service = None
+            self._storage = None
+            self._default_service = 'sql'
+            self._service_stats = {
+                'elastic': {
+                    'requests': 0,
+                    'errors': 0,
+                    'last_request': None
+                },
+                'sql': {
+                    'requests': 0,
+                    'errors': 0,
+                    'last_request': None
+                }
             }
-        }
-        self.initialized = True
-        logger.info("✅ SearchService base inicializado")
+            self._set_initialized(True)
+            
+        except Exception as e:
+            self._set_initialized(False, str(e))
+            raise
+
+    @property
+    @lazy_load('storage')
+    def storage(self):
+        """Obtiene el StorageService de forma lazy"""
+        return self._storage
 
     @property
     def elastic_service(self):
         """Obtiene ElasticService de forma lazy"""
         if self._elastic_service is None:
-            from .elastic_service import ElasticService
+            logger.debug("🔄 Lazy loading de ElasticService...")
             self._elastic_service = ElasticService()
+            logger.debug("✅ ElasticService cargado")
         return self._elastic_service
 
     @property
     def sql_service(self):
         """Obtiene SQLService de forma lazy"""
         if self._sql_service is None:
-            from .sql_service import SQLService
+            logger.debug("🔄 Lazy loading de SQLService...")
             self._sql_service = SQLService()
+            logger.debug("✅ SQLService cargado")
         return self._sql_service
-
-    @property
-    def storage(self):
-        """Obtiene el StorageService de forma lazy"""
-        if self._storage is None:
-            self._storage = service_locator.get('storage')
-            if self._storage is None:
-                logger.error("❌ StorageService no encontrado en ServiceLocator")
-        return self._storage
 
     def get_user_preference(self, user_id: str) -> str:
         """
@@ -217,7 +223,4 @@ class DatabaseSearchService:
             status['error'] = str(e)
             logger.error(f"Error en inserción con {service}: {e}")
             
-        return status
-
-# Crear instancia global
-database_search_service = DatabaseSearchService() 
+        return status 
