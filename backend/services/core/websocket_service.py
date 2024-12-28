@@ -38,30 +38,27 @@ class WebSocketService(LazyLoadService):
         return self._storage
 
     def _setup_handlers(self):
+        # Handlers básicos
         @self.socketio.on('connect')
         def handle_connect():
-            """Maneja la conexión de un cliente"""
             logger.info("📡 Nueva conexión WebSocket")
             
         @self.socketio.on('disconnect')
         def handle_disconnect():
-            """Maneja la desconexión de un cliente"""
             logger.info("👋 Cliente desconectado")
 
+        # Handler de encryption (core)
         @self.socketio.on('encryption.get_master_key')
         def handle_get_master_key(data):
-            """Maneja la solicitud de obtener la master key"""
             try:
                 logger.info("🔐 Solicitud de master key recibida")
                 
-                # 1. Validar datos
                 if not isinstance(data, dict):
                     error_msg = "❌ Datos recibidos no son un diccionario válido"
                     logger.error(error_msg)
                     emit('encryption.master_key', {'status': 'error', 'message': error_msg})
                     return
 
-                # 2. Obtener timestamp
                 install_timestamp = data.get('installTimestamp')
                 if not install_timestamp:
                     error_msg = "❌ No se proporcionó installTimestamp"
@@ -69,7 +66,6 @@ class WebSocketService(LazyLoadService):
                     emit('encryption.master_key', {'status': 'error', 'message': error_msg})
                     return
 
-                # 3. Obtener master key usando el servicio dedicado
                 master_key = master_key_service.get_key_for_install(install_timestamp)
                 if not master_key:
                     error_msg = "❌ Error generando master key"
@@ -77,7 +73,6 @@ class WebSocketService(LazyLoadService):
                     emit('encryption.master_key', {'status': 'error', 'message': error_msg})
                     return
 
-                # 4. Enviar respuesta
                 logger.info("✅ Master key generada correctamente")
                 emit('encryption.master_key', {
                     'status': 'success',
@@ -89,53 +84,9 @@ class WebSocketService(LazyLoadService):
                 logger.error(error_msg)
                 emit('encryption.master_key', {'status': 'error', 'message': error_msg})
 
-        @self.socketio.on('openai.test_search')
-        def handle_test_search(data):
-            """Maneja la solicitud de prueba de búsqueda con OpenAI"""
-            try:
-                logger.info("\n🔍 Iniciando prueba OpenAI...")
-                logger.info(f"📦 Datos recibidos: {json.dumps(data, indent=2)}")
-                
-                # 1. Validar datos de entrada
-                if not isinstance(data, dict):
-                    error_msg = "❌ Datos recibidos no son un diccionario válido"
-                    logger.error(error_msg)
-                    emit('openai.test_result', {'status': 'error', 'message': error_msg})
-                    return
-
-                # 2. Almacenar datos en storage
-                if not self.storage:
-                    error_msg = "❌ StorageService no disponible"
-                    logger.error(error_msg)
-                    emit('openai.test_result', {'status': 'error', 'message': error_msg})
-                    return
-
-                # Almacenar datos temporales para el test
-                self.storage.set_value('openai_test_data', {
-                    'text': data.get('text'),
-                    'messages': data.get('messages', []),
-                    'systemPrompt': data.get('systemPrompt', '')
-                })
-                
-                # 3. Obtener respuesta del storage
-                response = self.storage.process_openai_test()
-                
-                # 4. Enviar respuesta
-                logger.info(f"📤 Enviando resultado: {json.dumps(response, indent=2)}")
-                emit('openai.test_result', {
-                    'status': 'success',
-                    'query': data.get('text', ''),
-                    'response': response.get('response') if response else None
-                })
-                
-            except Exception as e:
-                error_msg = f"❌ Error en handle_test_search: {str(e)}"
-                logger.error(error_msg)
-                emit('openai.test_result', {'status': 'error', 'message': error_msg})
-
+        # Handlers de storage (core)
         @self.socketio.on('storage.set_value')
         def handle_set_value(data: Dict[str, Any]):
-            """Maneja la solicitud de establecer un valor"""
             key = data.get('key')
             value = data.get('value')
             request_id = data.get('request_id')
@@ -152,14 +103,11 @@ class WebSocketService(LazyLoadService):
                 
             if key and value is not None:
                 if self.storage.set_value(key, value):
-                    # Confirmar al cliente original
                     emit('storage.value_set', {
                         'status': 'success',
                         'key': key,
                         'request_id': request_id
                     })
-                    
-                    # Broadcast a todos excepto al emisor
                     emit('storage.value_updated', {
                         'key': key,
                         'value': value
@@ -179,7 +127,6 @@ class WebSocketService(LazyLoadService):
 
         @self.socketio.on('storage.get_value')
         def handle_get_value(data: Dict[str, Any]):
-            """Maneja la solicitud de obtener un valor"""
             key = data.get('key')
             request_id = data.get('request_id')
             

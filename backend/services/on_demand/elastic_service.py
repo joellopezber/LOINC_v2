@@ -1,10 +1,11 @@
 from elasticsearch import Elasticsearch
 from typing import List, Dict, Optional
 import logging
+from ..lazy_load_service import LazyLoadService
 
 logger = logging.getLogger(__name__)
 
-class ElasticService:
+class ElasticService(LazyLoadService):
     _instance = None
 
     def __new__(cls):
@@ -14,13 +15,19 @@ class ElasticService:
 
     def __init__(self):
         """Inicializa el servicio de Elasticsearch de forma lazy"""
-        if hasattr(self, 'initialized'):
+        if hasattr(self, '_initialized'):
             return
             
+        super().__init__()
         logger.info("🔌 Inicializando ElasticService")
-        self._client = None
-        self.initialized = True
-        logger.info("✅ ElasticService base inicializado")
+        
+        try:
+            self._client = None
+            self._set_initialized(True)
+            
+        except Exception as e:
+            self._set_initialized(False, str(e))
+            raise
 
     @property
     def client(self):

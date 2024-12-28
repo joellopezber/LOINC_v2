@@ -2,6 +2,7 @@ import os
 import logging
 from typing import Optional, Dict, Any
 from .openai_service import OpenAIService
+from ..lazy_load_service import LazyLoadService, lazy_load
 
 # Configurar logging
 logging.basicConfig(level=logging.DEBUG)
@@ -75,10 +76,35 @@ If the input refers to a group of tests, identify and include all associated tes
 6. If the security is defined in a group, clearly specify that the combination is detrimental to the security
 7. Identify all the key words that you need to categorize or stop the terminus"""
 
-class OntologyService:
+class OntologyService(LazyLoadService):
+    _instance = None
+
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super(OntologyService, cls).__new__(cls)
+        return cls._instance
+
     def __init__(self):
         """Inicializa el servicio de ontología"""
-        logger.info("🔍 Servicio de Ontología creado")
+        if hasattr(self, '_initialized'):
+            return
+            
+        super().__init__()
+        logger.info("🔍 Inicializando OntologyService")
+        
+        try:
+            self._openai_service = None
+            self._set_initialized(True)
+            
+        except Exception as e:
+            self._set_initialized(False, str(e))
+            raise
+
+    @property
+    @lazy_load('openai')
+    def openai_service(self):
+        """Obtiene el OpenAIService de forma lazy"""
+        return self._openai_service
 
     def _validate_response(self, response: str) -> bool:
         """

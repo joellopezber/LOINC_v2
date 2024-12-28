@@ -55,7 +55,7 @@ def run_server(app, websocket):
     if os.environ.get('FLASK_ENV') == 'development':
         print("\n🚀 Servidor de desarrollo iniciado en http://localhost:5001")
         print("\n📝 Tests disponibles en:")
-        print("   - Tests Index: http://localhost:5001/tests")
+        print("   - Tests Index: http://localhost:5001/tests/index_test.html")
         websocket.run()
     else:
         print("🚀 Servidor de producción iniciado")

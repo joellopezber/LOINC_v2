@@ -1,8 +1,11 @@
 import sqlite3
 from typing import List, Dict, Optional
 import logging
+from ..lazy_load_service import LazyLoadService
 
-class SQLService:
+logger = logging.getLogger(__name__)
+
+class SQLService(LazyLoadService):
     _instance = None
 
     def __new__(cls):
@@ -12,13 +15,19 @@ class SQLService:
 
     def __init__(self):
         """Inicializa el servicio SQL de forma lazy"""
-        if hasattr(self, 'initialized'):
+        if hasattr(self, '_initialized'):
             return
             
+        super().__init__()
         logger.info("💾 Inicializando SQLService")
-        self._connection = None
-        self.initialized = True
-        logger.info("✅ SQLService base inicializado")
+        
+        try:
+            self._connection = None
+            self._set_initialized(True)
+            
+        except Exception as e:
+            self._set_initialized(False, str(e))
+            raise
 
     @property
     def connection(self):
