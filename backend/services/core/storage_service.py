@@ -3,7 +3,7 @@ import logging
 import time
 from .encryption_service import encryption_service
 from ..service_locator import service_locator
-from .lazy_load_service import LazyLoadService, lazy_load
+from ..lazy_load_service import LazyLoadService, lazy_load
 import json
 
 logger = logging.getLogger(__name__)

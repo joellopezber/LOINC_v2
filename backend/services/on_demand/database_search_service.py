@@ -4,7 +4,7 @@ import time
 from .elastic_service import ElasticService
 from .sql_service import SQLService
 from ..service_locator import service_locator
-from ..core.lazy_load_service import LazyLoadService, lazy_load
+from ..lazy_load_service import LazyLoadService, lazy_load
 import json
 
 # Configurar logging
