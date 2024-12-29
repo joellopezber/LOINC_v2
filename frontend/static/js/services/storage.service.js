@@ -441,20 +441,46 @@ class StorageService {
      * Obtiene un valor (para compatibilidad con tests)
      */
     async get(key) {
-        if (key === 'searchConfig') {
-            return this.getSearchConfig();
+        try {
+            console.log('🔍 [StorageService] Obteniendo valor para key:', key);
+            if (key === 'searchConfig') {
+                return this.getSearchConfig();
+            }
+            // Añadir soporte para ontologyResults
+            if (key === 'ontologyResults') {
+                const value = localStorage.getItem(key);
+                console.log('📦 [StorageService] Valor obtenido para ontologyResults:', value);
+                return value ? JSON.parse(value) : null;
+            }
+            return null;
+        } catch (error) {
+            console.error('❌ [StorageService] Error en get:', error);
+            return null;
         }
-        return null;
     }
 
     /**
      * Establece un valor (para compatibilidad con tests)
      */
     async set(key, value) {
-        if (key === 'searchConfig') {
-            return this.saveSearchConfig(value);
+        try {
+            console.log('💾 [StorageService] Guardando valor para key:', key);
+            console.log('📝 [StorageService] Valor a guardar:', value);
+            
+            if (key === 'searchConfig') {
+                return this.saveSearchConfig(value);
+            }
+            // Añadir soporte para ontologyResults
+            if (key === 'ontologyResults') {
+                localStorage.setItem(key, JSON.stringify(value));
+                console.log('✅ [StorageService] Valor guardado en ontologyResults');
+                return true;
+            }
+            return false;
+        } catch (error) {
+            console.error('❌ [StorageService] Error en set:', error);
+            return false;
         }
-        return false;
     }
 }
 

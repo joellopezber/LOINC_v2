@@ -54,18 +54,20 @@
         }
 
         .loinc-code {
-            display: flex;
+            display: inline-flex;
             align-items: center;
-            gap: 8px;
             padding: 4px 8px;
             background: var(--color-background);
             border-radius: var(--radius-sm);
-            margin-bottom: 4px;
+            margin: 4px;
+            border: 1px solid var(--color-border);
         }
 
         .code {
+            font-family: 'Roboto Mono', monospace;
             font-weight: 500;
             color: var(--color-primary);
+            font-size: 14px;
         }
 
         .description {
@@ -124,7 +126,7 @@
 
             <div id="loincSection" class="section">
                 <div class="section-title">Códigos LOINC</div>
-                <div id="loincCodes"></div>
+                <div id="loincCodes" class="tag-list"></div>
             </div>
 
             <div id="keywordSection" class="section">
@@ -204,14 +206,9 @@
 
             // Mostrar códigos LOINC
             const loincCodes = document.getElementById('loincCodes');
-            const loincArray = Object.values(loinc_codes).map(code => ({
-                code: code.code,
-                description: `${code.component} - ${code.system}`
-            }));
-            loincCodes.innerHTML = loincArray.map(code => 
+            loincCodes.innerHTML = data.loinc_codes.map(code => 
                 `<div class="loinc-code">
-                    <span class="code">${code.code}</span>
-                    <span class="description">${code.description}</span>
+                    <span class="code">${code}</span>
                 </div>`
             ).join('');
 

@@ -44,26 +44,10 @@ If the input refers to a group of tests, identify and include all associated tes
     "test_types": [
         "list of laboratory tests (do not include the word test)"
     ],
-    "loinc_codes": {
-        "code1": {
-            "code": "2345-7",
-            "component": "Glucose",
-            "property": "Mass/volume",
-            "time": "Point in time",
-            "system": "Blood",
-            "scale": "Quantitative",
-            "method": ""
-        },
-        "code2": {
-            "code": "2339-0",
-            "component": "Glucose",
-            "property": "Mass/volume",
-            "time": "Point in time",
-            "system": "Serum/Plasma",
-            "scale": "Quantitative",
-            "method": ""
-        }
-    },
+    "loinc_codes": [
+        "2345-7",
+        "2339-0"
+    ],
     "keywords": [
         "list of specific laboratory terms for search"
     ]
@@ -72,7 +56,7 @@ If the input refers to a group of tests, identify and include all associated tes
 ### Important Rules:
 1. ALL output must be in English
 2. Test types should be concise (no "test" or "analysis" words unless part of official name)
-3. Include LOINC codes with full LOINC parts (component, property, time, system, scale, method)
+3. LOINC codes should be just the code numbers in the standard format (e.g., "2345-7")
 4. Related terms should focus on laboratory terms
 5. Keywords should be specific laboratory terms
 6. If the security is defined in a group, clearly specify that the combination is detrimental to the security
@@ -269,10 +253,17 @@ class OntologyService(LazyLoadService):
                 json_str = self._clean_json_response(response)
                 # Parsear a diccionario
                 data = json.loads(json_str)
+                
+                # Añadir el término original
+                enriched_data = {
+                    "original_term": term,
+                    **data
+                }
+                
                 logger.info("✅ Respuesta validada y parseada correctamente")
                 logger.info("✅ TÉRMINO PROCESADO EXITOSAMENTE")
                 logger.info("=" * 50)
-                return data
+                return enriched_data
                 
             except Exception as e:
                 logger.error(f"❌ Error procesando JSON: {str(e)}")
