@@ -39,6 +39,34 @@ class StorageService {
                 await this.queueSync();
             }, 100);
         });
+
+        // Configuración de tipos de almacenamiento
+        this.storageTypes = {
+            'searchConfig': {
+                sync: true,
+                cache: true,
+                validate: (value) => {
+                    // Validación específica para searchConfig
+                    return value && typeof value === 'object';
+                }
+            },
+            'ontologyResults': {
+                sync: true,
+                cache: true,
+                validate: (value) => {
+                    // Validación específica para ontologyResults
+                    return value && typeof value === 'object';
+                }
+            },
+            'apiKey': {
+                sync: true,
+                encrypt: true,
+                validate: (value) => {
+                    // Validación específica para apiKey
+                    return typeof value === 'string';
+                }
+            }
+        };
     }
 
     /**
@@ -223,6 +251,10 @@ class StorageService {
                         localStorage.setItem('installTimestamp', value);
                         this.logger.debug('✅ Timestamp actualizado');
                         break;
+                    case 'ontologyResults':
+                        localStorage.setItem('ontologyResults', JSON.stringify(value));
+                        this.logger.debug('✅ Resultados de ontología actualizados');
+                        break;
                 }
             } catch (error) {
                 this.logger.error('Error actualizando valor', error);
@@ -326,13 +358,14 @@ class StorageService {
             }
 
             // Obtener valores actuales
-            const [config, apiKey, timestamp] = await Promise.all([
-                this.getSearchConfig(), // Usar getSearchConfig para aprovechar el caché
+            const [config, apiKey, timestamp, ontologyResults] = await Promise.all([
+                this.getSearchConfig(),
                 localStorage.getItem('openaiApiKey'),
-                localStorage.getItem('installTimestamp')
+                localStorage.getItem('installTimestamp'),
+                this.get('ontologyResults')  // Añadimos ontologyResults
             ]);
 
-            if (!config && !apiKey && !timestamp) {
+            if (!config && !apiKey && !timestamp && !ontologyResults) {
                 this.logger.debug('⏭️ Nada que sincronizar');
                 return true;
             }
@@ -373,6 +406,18 @@ class StorageService {
                         key: 'installTimestamp',
                         value: timestamp,
                         request_id: `${syncId}_timestamp`
+                    });
+                    resolve();
+                }));
+            }
+
+            // Añadir sincronización de ontologyResults
+            if (ontologyResults) {
+                promises.push(new Promise((resolve) => {
+                    window.socket.emit('storage.set_value', {
+                        key: 'ontologyResults',
+                        value: ontologyResults,
+                        request_id: `${syncId}_ontology`
                     });
                     resolve();
                 }));
@@ -442,19 +487,37 @@ class StorageService {
      */
     async get(key) {
         try {
-            console.log('🔍 [StorageService] Obteniendo valor para key:', key);
+            this.logger.debug('Obteniendo valor para key:', key);
+            
+            // Verificar si el tipo de almacenamiento está soportado
+            if (!this.storageTypes[key]) {
+                this.logger.error('Tipo de almacenamiento no soportado:', key);
+                return null;
+            }
+
+            // Manejar casos especiales
             if (key === 'searchConfig') {
                 return this.getSearchConfig();
             }
-            // Añadir soporte para ontologyResults
-            if (key === 'ontologyResults') {
-                const value = localStorage.getItem(key);
-                console.log('📦 [StorageService] Valor obtenido para ontologyResults:', value);
-                return value ? JSON.parse(value) : null;
+
+            // Obtener valor de localStorage
+            const value = localStorage.getItem(key);
+            if (!value) {
+                this.logger.debug('No hay valor almacenado para:', key);
+                return null;
             }
-            return null;
+
+            // Parsear valor
+            try {
+                const parsed = JSON.parse(value);
+                this.logger.debug('Valor obtenido para ' + key + ':', parsed);
+                return parsed;
+            } catch (error) {
+                this.logger.error('Error parseando valor:', error);
+                return null;
+            }
         } catch (error) {
-            console.error('❌ [StorageService] Error en get:', error);
+            this.logger.error('Error en get:', error);
             return null;
         }
     }
@@ -464,21 +527,43 @@ class StorageService {
      */
     async set(key, value) {
         try {
-            console.log('💾 [StorageService] Guardando valor para key:', key);
-            console.log('📝 [StorageService] Valor a guardar:', value);
-            
+            this.logger.debug('Guardando valor para key:', key);
+            this.logger.debug('Valor a guardar:', value);
+
+            // Verificar si el tipo de almacenamiento está soportado
+            if (!this.storageTypes[key]) {
+                this.logger.error('Tipo de almacenamiento no soportado:', key);
+                return false;
+            }
+
+            // Validar valor según el tipo
+            if (!this.storageTypes[key].validate(value)) {
+                this.logger.error('Valor inválido para ' + key + ':', value);
+                return false;
+            }
+
+            // Manejar casos especiales
             if (key === 'searchConfig') {
                 return this.saveSearchConfig(value);
             }
-            // Añadir soporte para ontologyResults
-            if (key === 'ontologyResults') {
+
+            // Guardar en localStorage
+            try {
                 localStorage.setItem(key, JSON.stringify(value));
-                console.log('✅ [StorageService] Valor guardado en ontologyResults');
+                this.logger.debug('Valor guardado correctamente');
+
+                // Sincronizar si es necesario
+                if (this.storageTypes[key].sync && window.socket?.connected) {
+                    await this.queueSync();
+                }
+
                 return true;
+            } catch (error) {
+                this.logger.error('Error guardando valor:', error);
+                return false;
             }
-            return false;
         } catch (error) {
-            console.error('❌ [StorageService] Error en set:', error);
+            this.logger.error('Error en set:', error);
             return false;
         }
     }

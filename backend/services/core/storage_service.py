@@ -28,7 +28,8 @@ class StorageService(LazyLoadService):
             self.storage_data = {
                 'searchConfig': {},
                 'openaiApiKey': None,
-                'installTimestamp': None
+                'installTimestamp': None,
+                'ontologyResults': {}
             }
             self.last_values = {}
             self._websocket = None
@@ -53,11 +54,11 @@ class StorageService(LazyLoadService):
                     'storage.value_updated',
                     {'key': key, 'value': value},
                     namespace=None,
-                    skip_sid=None  # Enviar a todos los clientes
+                    skip_sid=None
                 )
-                logger.debug(f"📡 Emitida actualización: {key}")
+                logger.debug(f"📡 [Storage:{key}] Actualización emitida")
         except Exception as e:
-            logger.error(f"❌ Error emitiendo actualización: {e}")
+            logger.error(f"❌ [Storage:{key}] Error en emisión: {str(e)}")
 
     def _has_value_changed(self, key: str, new_value: Any) -> bool:
         """Comprueba si el valor ha cambiado respecto al último almacenado"""
@@ -67,25 +68,37 @@ class StorageService(LazyLoadService):
 
     def get_value(self, key: str) -> Any:
         """Obtiene un valor del storage"""
-        logger.debug(f"📤 Obteniendo valor de: {key}")
+        logger.debug(f"📤 [Storage:{key}] Obteniendo valor")
         return self.storage_data.get(key)
 
     def set_value(self, key: str, value: Any) -> bool:
         """Establece un valor en el storage"""
         try:
+            timestamp = time.strftime('%Y-%m-%d %H:%M:%S')
+            logger.debug(f"\n{'='*50}")
+            logger.debug(f"⏱️ [{timestamp}] Iniciando operación para {key}")
+            logger.debug(f"{'='*50}")
+
             # Validar que la key sea permitida
-            allowed_keys = ['searchConfig', 'openaiApiKey', 'installTimestamp', 'openai_test_data']
+            allowed_keys = ['searchConfig', 'openaiApiKey', 'installTimestamp', 'openai_test_data', 'ontologyResults']
             if key not in allowed_keys:
-                logger.error(f"❌ Key no permitida: {key}")
+                logger.error(f"❌ [Storage] Key no permitida: {key}")
+                return False
+
+            # Validar estructura del valor
+            validation_result = self._validate_value(key, value)
+            if not validation_result['valid']:
+                logger.error(f"❌ [Storage:{key}] Error de validación: {validation_result['error']}")
                 return False
 
             # Log del valor si ha cambiado
             if self._has_value_changed(key, value):
-                formatted_json = json.dumps({
-                    'key': key,
-                    'value': value
-                }, indent=2)
-                logger.info(f"📥 Nuevo valor recibido:\n{formatted_json}")
+                # Formatear el valor para el log según el tipo
+                log_value = self._format_value_for_log(key, value)
+                size = self._get_value_size(value)
+                logger.info(f"📥 [Storage:{key}] Nuevo valor recibido")
+                logger.info(f"📊 Tamaño: {size} bytes")
+                logger.info(f"📝 Contenido:\n{log_value}")
                 self.last_values[key] = value
 
             # Actualizar valor
@@ -94,17 +107,78 @@ class StorageService(LazyLoadService):
             else:
                 self.storage_data[key] = value
 
-            logger.info(f"💾 Almacenado: {key}")
+            logger.info(f"💾 [Storage:{key}] Almacenado correctamente en {timestamp}")
             
             # Emitir actualización solo si no es un dato temporal de test
             if key != 'openai_test_data':
                 self.emit_update(key, value)
+                
+            logger.debug(f"{'='*50}\n")
             
             return True
 
         except Exception as e:
-            logger.error(f"❌ Error almacenando valor: {e}")
+            logger.error(f"❌ [Storage:{key}] Error: {str(e)}")
             return False
+
+    def _validate_value(self, key: str, value: Any) -> Dict[str, Any]:
+        """Valida la estructura del valor según el tipo"""
+        try:
+            if key == 'ontologyResults':
+                if not isinstance(value, dict):
+                    return {'valid': False, 'error': 'Debe ser un diccionario'}
+                for term, data in value.items():
+                    if not isinstance(data, dict):
+                        return {'valid': False, 'error': f'Datos inválidos para término {term}'}
+                    required_fields = ['data', 'timestamp', 'searchCount']
+                    missing_fields = [f for f in required_fields if f not in data]
+                    if missing_fields:
+                        return {'valid': False, 'error': f'Campos faltantes: {missing_fields}'}
+            return {'valid': True, 'error': None}
+        except Exception as e:
+            return {'valid': False, 'error': str(e)}
+
+    def _get_value_size(self, value: Any) -> int:
+        """Calcula el tamaño aproximado del valor en bytes"""
+        try:
+            return len(json.dumps(value).encode('utf-8'))
+        except Exception:
+            return 0
+
+    def _format_value_for_log(self, key: str, value: Any) -> str:
+        """Formatea el valor para el log según el tipo de dato"""
+        try:
+            if key == 'ontologyResults':
+                # Para ontologyResults, mostrar resumen detallado
+                num_results = len(value) if isinstance(value, dict) else 0
+                if num_results > 0:
+                    last_term = list(value.keys())[-1]
+                    last_data = value[last_term]
+                    return (
+                        f"Total términos: {num_results}\n"
+                        f"Último término: {last_term}\n"
+                        f"Timestamp: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(last_data['timestamp']/1000))}\n"
+                        f"Búsquedas: {last_data['searchCount']}"
+                    )
+                return "Sin resultados"
+            elif key == 'openaiApiKey':
+                return "********"
+            elif key == 'searchConfig':
+                # Mostrar resumen de la configuración
+                if isinstance(value, dict):
+                    search = value.get('search', {})
+                    return (
+                        f"Modo ontología: {search.get('ontologyMode', 'N/A')}\n"
+                        f"Modo DB: {search.get('dbMode', 'N/A')}\n"
+                        f"OpenAI config: {len(search.get('openai', {}))} opciones\n"
+                        f"SQL config: {len(value.get('sql', {}))} opciones\n"
+                        f"Elastic config: {len(value.get('elastic', {}))} opciones"
+                    )
+                return str(value)
+            else:
+                return json.dumps(value, indent=2)
+        except Exception as e:
+            return f"Error formateando valor: {str(e)}"
 
     def get_all(self) -> Dict[str, Any]:
         """Obtiene todos los valores almacenados"""

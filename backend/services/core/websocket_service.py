@@ -7,6 +7,7 @@ from .encryption_service import encryption_service
 from .master_key_service import master_key_service
 from ..service_locator import service_locator
 from ..lazy_load_service import LazyLoadService, lazy_load
+import time
 
 # Configurar logging
 logging.basicConfig(level=logging.DEBUG)
@@ -18,7 +19,9 @@ class WebSocketService(LazyLoadService):
     def __init__(self, app):
         """Inicializa el servicio WebSocket"""
         super().__init__()
-        logger.info("🔌 Inicializando WebSocket")
+        self.active_connections = {}
+        self.logger = logging.getLogger(__name__)
+        self.logger.info("🔌 Inicializando WebSocket")
         
         try:
             self.app = app
@@ -40,12 +43,12 @@ class WebSocketService(LazyLoadService):
     def _setup_handlers(self):
         # Handlers básicos
         @self.socketio.on('connect')
-        def handle_connect():
-            logger.info("📡 Nueva conexión WebSocket")
-            
+        def handle_connect(sid, environ):
+            self.handle_connect(sid, environ)
+
         @self.socketio.on('disconnect')
-        def handle_disconnect():
-            logger.info("👋 Cliente desconectado")
+        def handle_disconnect(sid):
+            self.handle_disconnect(sid)
 
         # Handler de encryption (core)
         @self.socketio.on('encryption.get_master_key')
@@ -150,6 +153,73 @@ class WebSocketService(LazyLoadService):
                     'error': 'Key not provided',
                     'request_id': request_id
                 })
+
+    def handle_connect(self, sid, environ):
+        """Maneja nueva conexión WebSocket"""
+        timestamp = time.strftime('%Y-%m-%d %H:%M:%S')
+        client_info = {
+            'sid': sid,
+            'ip': environ.get('REMOTE_ADDR', 'unknown'),
+            'user_agent': environ.get('HTTP_USER_AGENT', 'unknown'),
+            'connected_at': time.time(),
+            'last_activity': time.time()
+        }
+        self.active_connections[sid] = client_info
+        
+        self.logger.info(
+            f"\n{'='*50}\n"
+            f"📡 Nueva conexión WebSocket\n"
+            f"🔍 ID: {sid}\n"
+            f"⏰ Timestamp: {timestamp}\n"
+            f"🌐 IP: {client_info['ip']}\n"
+            f"📱 User Agent: {client_info['user_agent']}\n"
+            f"👥 Conexiones activas: {len(self.active_connections)}\n"
+            f"{'='*50}"
+        )
+
+    def handle_disconnect(self, sid):
+        """Maneja desconexión WebSocket"""
+        if sid in self.active_connections:
+            client = self.active_connections[sid]
+            duration = time.time() - client['connected_at']
+            timestamp = time.strftime('%Y-%m-%d %H:%M:%S')
+            
+            self.logger.info(
+                f"\n{'='*50}\n"
+                f"👋 Desconexión WebSocket\n"
+                f"🔍 ID: {sid}\n"
+                f"⏰ Timestamp: {timestamp}\n"
+                f"⏱️ Duración: {int(duration)}s\n"
+                f"🌐 IP: {client['ip']}\n"
+                f"👥 Conexiones restantes: {len(self.active_connections) - 1}\n"
+                f"{'='*50}"
+            )
+            
+            del self.active_connections[sid]
+
+    def handle_error(self, sid, error):
+        """Maneja errores de WebSocket"""
+        timestamp = time.strftime('%Y-%m-%d %H:%M:%S')
+        client = self.active_connections.get(sid, {})
+        
+        self.logger.error(
+            f"\n{'='*50}\n"
+            f"❌ Error en WebSocket\n"
+            f"🔍 ID: {sid}\n"
+            f"⏰ Timestamp: {timestamp}\n"
+            f"🌐 IP: {client.get('ip', 'unknown')}\n"
+            f"💥 Error: {str(error)}\n"
+            f"{'='*50}"
+        )
+
+    def update_activity(self, sid):
+        """Actualiza timestamp de última actividad"""
+        if sid in self.active_connections:
+            self.active_connections[sid]['last_activity'] = time.time()
+
+    def get_connection_info(self, sid):
+        """Obtiene información de una conexión"""
+        return self.active_connections.get(sid)
 
     def run(self, host: str = '0.0.0.0', port: int = 5001):
         self.socketio.run(self.app, host=host, port=port) 
