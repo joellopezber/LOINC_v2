@@ -6,96 +6,16 @@
     <title>Test Ontology Service</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="../css/test-styles.css">
-    <style>
-        /* Estilos específicos para ontología */
-        .search-container {
-            display: flex;
-            gap: 10px;
-            margin-bottom: 20px;
-        }
-
-        .results {
-            margin-top: 20px;
-            padding: 20px;
-            background: var(--color-background);
-            border-radius: var(--radius-md);
-            display: none;
-        }
-
-        .results.visible {
-            display: block;
-        }
-
-        .section {
-            margin-bottom: 20px;
-            padding: 15px;
-            background: var(--color-surface);
-            border-radius: var(--radius-md);
-            border: 1px solid var(--color-border);
-        }
-
-        .section-title {
-            font-weight: 600;
-            margin-bottom: 10px;
-            color: var(--color-text);
-        }
-
-        .tag-list {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 8px;
-        }
-
-        .tag {
-            background: var(--color-background);
-            padding: 4px 8px;
-            border-radius: var(--radius-sm);
-            font-size: 14px;
-        }
-
-        .loinc-code {
-            display: inline-flex;
-            align-items: center;
-            padding: 4px 8px;
-            background: var(--color-background);
-            border-radius: var(--radius-sm);
-            margin: 4px;
-            border: 1px solid var(--color-border);
-        }
-
-        .code {
-            font-family: 'Roboto Mono', monospace;
-            font-weight: 500;
-            color: var(--color-primary);
-            font-size: 14px;
-        }
-
-        .description {
-            color: var(--color-text-secondary);
-            font-size: 14px;
-        }
-
-        .json-viewer {
-            background: var(--color-surface);
-            padding: 15px;
-            border-radius: var(--radius-md);
-            border: 1px solid var(--color-border);
-            font-family: monospace;
-            white-space: pre-wrap;
-            font-size: 14px;
-            line-height: 1.5;
-        }
-    </style>
 </head>
 <body>
     <div class="container">
-        <a href="/tests/index_test.html" class="back-link">← Volver a Tests</a>
+        <a href="/tests/index.html" class="back-link">← Volver a Tests</a>
         <h1>Test Ontology Service</h1>
         
         <div class="status-section">
             <div class="status-item">
                 <span class="status-label">Estado WebSocket:</span>
-                <span id="connectionStatus" class="disconnected">Desconectado</span>
+                <span id="connectionStatus" class="connectionStatus disconnected">Desconectado</span>
             </div>
             <div class="status-item">
                 <span class="status-label">Installation Time:</span>
@@ -144,7 +64,7 @@
     <!-- Scripts necesarios -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.min.js"></script>
     <script type="module">
-        import { OntologyTester } from '../js/testers/ontology-tester.js';
+        import { OntologyTester } from '../js/ontology.js';
 
         // Referencias DOM
         const searchInput = document.getElementById('searchInput');

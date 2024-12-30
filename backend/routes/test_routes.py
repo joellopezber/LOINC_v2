@@ -19,7 +19,7 @@ def serve_tests(filename):
 @test_routes.route('/tests')
 def serve_test_index():
     """Sirve la página principal de tests"""
-    return send_from_directory('../frontend/tests', 'index_test.html')
+    return send_from_directory('../frontend/tests', 'index.html')
 
 @test_routes.route('/tests/manual/services/openai')
 def serve_test_openai():

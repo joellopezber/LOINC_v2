@@ -9,13 +9,13 @@
 </head>
 <body>
     <div class="container">
-        <a href="/tests/index_test.html" class="back-link">← Volver a Tests</a>
+        <a href="/tests/index.html" class="back-link">← Volver a Tests</a>
         <h1>Test Search Service</h1>
         
         <div class="status-section">
             <div class="status-item">
                 <span class="status-label">Estado WebSocket:</span>
-                <span id="connectionStatus" class="disconnected">Desconectado</span>
+                <span id="connectionStatus" class="connectionStatus disconnected">Desconectado</span>
             </div>
             <div class="status-item">
                 <span class="status-label">Installation Time:</span>
@@ -48,7 +48,7 @@
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.min.js"></script>
     <script type="module">
-        import { SearchTester } from '../js/testers/search-tester.js';
+        import { SearchTester } from '../js/search.js';
 
         // Referencias DOM
         const searchInput = document.getElementById('searchInput');
