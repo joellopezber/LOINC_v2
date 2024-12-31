@@ -81,18 +81,6 @@ class StorageService(LazyLoadService):
                 logger.error(f"❌ [Storage:{key}] Error de validación: {validation_result['error']}")
                 return False
 
-            # Si es API key, encriptar antes de almacenar
-            if key == 'openaiApiKey' and value:
-                if not install_id:
-                    logger.error("❌ No hay installId para encriptar API key")
-                    return False
-                    
-                from .encryption_service import encryption_service
-                value = encryption_service.encrypt(value, install_id)
-                if not value:
-                    logger.error("❌ Error encriptando API key")
-                    return False
-
             # Obtener almacenamiento del usuario
             user_storage = self._get_user_storage(install_id)
 
@@ -194,21 +182,13 @@ class StorageService(LazyLoadService):
                 logger.error("❌ Credenciales no encontradas en storage")
                 return None
 
-            # Delegar desencriptación al encryption_service
-            from .encryption_service import encryption_service
-            api_key = encryption_service.decrypt(encrypted_key, install_id)
-
-            if not api_key:
-                logger.error("❌ Error desencriptando API key")
-                return None
-
             # Validación básica del formato
-            if not api_key.startswith('sk-'):
+            if not encrypted_key.startswith('sk-'):
                 logger.error("❌ API key inválida (debe empezar con sk-)")
                 return None
 
             logger.info("✅ Credenciales obtenidas correctamente")
-            return api_key
+            return encrypted_key
 
         except Exception as e:
             logger.error(f"❌ Error obteniendo credenciales: {e}")
