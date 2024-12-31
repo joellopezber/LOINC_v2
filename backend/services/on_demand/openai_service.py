@@ -48,7 +48,7 @@ class OpenAIService(LazyLoadService):
         """Obtiene el StorageService de forma lazy"""
         return self._storage
 
-    async def get_credentials(self, install_id: str) -> Optional[str]:
+    def get_credentials(self, install_id: str) -> Optional[str]:
         """Obtiene las credenciales de OpenAI para un usuario específico"""
         try:
             logger.info(f"\n{'='*50}")
@@ -60,7 +60,7 @@ class OpenAIService(LazyLoadService):
                 return None
                 
             logger.info("📤 Solicitando API key del storage...")
-            encrypted_key = await self.storage.get('openaiApiKey', install_id)
+            encrypted_key = self.storage.get_value('openaiApiKey', install_id)
             logger.info(f"📥 API key encriptada: {encrypted_key[:20]}...{encrypted_key[-20:] if encrypted_key else ''}")
             
             if not encrypted_key:
@@ -115,7 +115,7 @@ class OpenAIService(LazyLoadService):
             logger.error(f"❌ Error inicializando OpenAI: {e}")
             return False
 
-    async def process_query(
+    def process_query(
         self, 
         user_prompt: str,
         install_id: str,
@@ -140,7 +140,7 @@ class OpenAIService(LazyLoadService):
             
             # Inicializar cliente si es necesario
             if not self.client:
-                api_key = await self.get_credentials(install_id)
+                api_key = self.get_credentials(install_id)
                 if not api_key:
                     return "Por favor, configura tu API key de OpenAI en el panel de configuración antes de continuar"
                 self.client = OpenAI(api_key=api_key)
