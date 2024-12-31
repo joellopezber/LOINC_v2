@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Info Backend</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="../css/test-styles.css">
+</head>
+<body>
+    <div class="container">
+        <a href="../../index.html" class="back-link">← Volver a Tests</a>
+        <h1>Test Info Backend</h1>
+
+        <div class="status-section">
+            <div class="status-item">
+                <span class="status-label">Estado WebSocket:</span>
+                <span id="connectionStatus" class="connectionStatus disconnected">Desconectado</span>
+            </div>
+            <div class="status-item">
+                <span class="status-label">Installation Time:</span>
+                <span id="installTimeDisplay">Cargando...</span>
+            </div>
+        </div>
+
+        <div style="display: flex; gap: 10px; margin: 20px 0;">
+            <button id="readButton" class="button">Leer Datos</button>
+            <button id="syncButton" class="button">Sincronizar</button>
+            <button id="clearButton" class="button danger">Limpiar Memoria</button>
+        </div>
+
+        <div id="results" class="results"></div>
+    </div>
+
+    <script type="module">
+        import { storageTest, displayResult, displayError } from '../js/infoback.js';
+
+        // Referencias DOM
+        const readButton = document.getElementById('readButton');
+        const syncButton = document.getElementById('syncButton');
+        const clearButton = document.getElementById('clearButton');
+        const resultsContainer = document.getElementById('results');
+        const connectionStatus = document.getElementById('connectionStatus');
+
+        // Configurar callbacks
+        storageTest.onConnectionChange = (isConnected) => {
+            connectionStatus.className = isConnected ? 'connectionStatus connected' : 'connectionStatus disconnected';
+            connectionStatus.textContent = isConnected ? 'Conectado' : 'Desconectado';
+            readButton.disabled = !isConnected;
+            syncButton.disabled = !isConnected;
+            clearButton.disabled = !isConnected;
+        };
+
+        // Leer datos
+        async function handleRead() {
+            try {
+                readButton.disabled = true;
+                const data = await storageTest.getAllData();
+                displayResult('results', data);
+            } catch (error) {
+                console.error('Error leyendo datos:', error);
+                displayError('results', error);
+            } finally {
+                readButton.disabled = false;
+            }
+        }
+
+        // Sincronizar
+        async function handleSync() {
+            try {
+                syncButton.disabled = true;
+                await storageTest.syncWithBackend();
+                await handleRead(); // Actualizar vista después de sincronizar
+            } catch (error) {
+                console.error('Error sincronizando:', error);
+                displayError('results', error);
+            } finally {
+                syncButton.disabled = false;
+            }
+        }
+
+        // Limpiar memoria
+        async function handleClear() {
+            if (!confirm('¿Estás seguro de que quieres limpiar la memoria del backend?')) return;
+            
+            try {
+                clearButton.disabled = true;
+                await storageTest.clearBackendMemory();
+                await handleRead(); // Actualizar vista después de limpiar
+            } catch (error) {
+                console.error('Error limpiando memoria:', error);
+                displayError('results', error);
+            } finally {
+                clearButton.disabled = false;
+            }
+        }
+
+        // Event listeners
+        readButton.addEventListener('click', handleRead);
+        syncButton.addEventListener('click', handleSync);
+        clearButton.addEventListener('click', handleClear);
+
+        // Inicializar al cargar
+        document.addEventListener('DOMContentLoaded', () => {
+            console.log('🚀 Iniciando aplicación...');
+            const installTime = localStorage.getItem('installTimestamp') || 'No disponible';
+            document.getElementById('installTimeDisplay').textContent = installTime;
+            console.log('⏰ Installation Time:', installTime);
+            storageTest.connect();
+        });
+    </script>
+</body>
+</html> 
