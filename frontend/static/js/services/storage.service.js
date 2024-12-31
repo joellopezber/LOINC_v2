@@ -296,12 +296,9 @@ class StorageService {
     async _getLocalData() {
         const data = {};
         for (const key of Object.keys(this.validator.types)) {
-            // No incluir API keys en la sincronización inicial
-            if (!key.endsWith('ApiKey')) {
-                const value = await this.get(key);
-                if (value !== null) {
-                    data[key] = value;
-                }
+            const value = await this.get(key);
+            if (value !== null) {
+                data[key] = value;
             }
         }
         return data;
