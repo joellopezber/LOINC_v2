@@ -69,7 +69,9 @@ class WebSocketService(LazyLoadService):
                     emit('encryption.master_key', {'status': 'error', 'message': error_msg})
                     return
 
-                master_key = master_key_service.get_key_for_install(install_timestamp)
+                # Delegar obtención de master key al encryption_service
+                master_key = encryption_service.get_key_for_install(install_timestamp)
+                
                 if not master_key:
                     error_msg = "❌ Error generando master key"
                     logger.error(error_msg)
@@ -92,6 +94,7 @@ class WebSocketService(LazyLoadService):
         def handle_set_value(data: Dict[str, Any]):
             key = data.get('key')
             value = data.get('value')
+            install_id = data.get('install_id')
             request_id = data.get('request_id')
             
             if not self.storage:
@@ -104,8 +107,18 @@ class WebSocketService(LazyLoadService):
                 })
                 return
                 
-            if key and value is not None:
-                if self.storage.set_value(key, value):
+            if not all([key, value, install_id]):
+                error_msg = "Key, value e install_id son requeridos"
+                logger.error(error_msg)
+                emit('storage.value_set', {
+                    'status': 'error',
+                    'message': error_msg,
+                    'request_id': request_id
+                })
+                return
+
+            try:
+                if self.storage.set_value(key, value, install_id):
                     emit('storage.value_set', {
                         'status': 'success',
                         'key': key,
@@ -121,10 +134,11 @@ class WebSocketService(LazyLoadService):
                         'message': 'Error setting value',
                         'request_id': request_id
                     })
-            else:
+            except Exception as e:
+                logger.error(f"Error en handle_set_value: {e}")
                 emit('storage.value_set', {
                     'status': 'error',
-                    'message': 'Key and value are required',
+                    'message': str(e),
                     'request_id': request_id
                 })
 
@@ -223,3 +237,26 @@ class WebSocketService(LazyLoadService):
 
     def run(self, host: str = '0.0.0.0', port: int = 5001):
         self.socketio.run(self.app, host=host, port=port) 
+
+    async def handle_set_value(self, key: str, value: Any, install_id: str) -> Dict[str, Any]:
+        """
+        Maneja la petición de guardar un valor
+        
+        Args:
+            key: Clave a guardar
+            value: Valor a guardar
+            install_id: ID de instalación del cliente
+            
+        Returns:
+            dict: Estado de la operación
+        """
+        try:
+            logger.debug(f"Guardando valor para key={key}, install_id={install_id}")
+            if self.storage.set_value(key, value, install_id):
+                logger.debug(f"Valor guardado correctamente para key={key}")
+                return {'status': 'success'}
+            logger.error(f"Error guardando valor para key={key}")
+            return {'status': 'error', 'message': 'Error guardando valor'}
+        except Exception as e:
+            logger.error(f"Error en handle_set_value: {e}")
+            return {'status': 'error', 'message': str(e)} 

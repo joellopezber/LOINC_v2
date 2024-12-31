@@ -25,12 +25,8 @@ class StorageService(LazyLoadService):
         logger.info("💾 Inicializando Storage service...")
         
         try:
-            self.storage_data = {
-                'searchConfig': {},
-                'openaiApiKey': None,
-                'installTimestamp': None,
-                'ontologyResults': {}
-            }
+            # Almacenar datos por usuario usando installId como clave
+            self.storage_data = {}
             self.last_values = {}
             self._websocket = None
             self._set_initialized(True)
@@ -45,42 +41,33 @@ class StorageService(LazyLoadService):
         """Obtiene el WebSocketService de forma lazy"""
         return self._websocket
 
-    def emit_update(self, key: str, value: Any):
-        """Emite una actualización a través de WebSocket"""
-        try:
-            if self.websocket and hasattr(self.websocket, 'socketio'):
-                # Usar emit con namespace=None para broadcast global
-                self.websocket.socketio.emit(
-                    'storage.value_updated',
-                    {'key': key, 'value': value},
-                    namespace=None,
-                    skip_sid=None
-                )
-                logger.debug(f"📡 [Storage:{key}] Actualización emitida")
-        except Exception as e:
-            logger.error(f"❌ [Storage:{key}] Error en emisión: {str(e)}")
+    def _get_user_storage(self, install_id: str) -> dict:
+        """Obtiene el almacenamiento específico del usuario"""
+        if install_id not in self.storage_data:
+            self.storage_data[install_id] = {
+                'searchConfig': {},
+                'openaiApiKey': None,
+                'installTimestamp': install_id,
+                'ontologyResults': {}
+            }
+        return self.storage_data[install_id]
 
-    def _has_value_changed(self, key: str, new_value: Any) -> bool:
-        """Comprueba si el valor ha cambiado respecto al último almacenado"""
-        if key not in self.last_values:
-            return True
-        return self.last_values[key] != new_value
+    def get_value(self, key: str, install_id: str) -> Any:
+        """Obtiene un valor del storage para un usuario específico"""
+        logger.debug(f"📤 [Storage:{key}] Obteniendo valor para usuario {install_id}")
+        user_storage = self._get_user_storage(install_id)
+        return user_storage.get(key)
 
-    def get_value(self, key: str) -> Any:
-        """Obtiene un valor del storage"""
-        logger.debug(f"📤 [Storage:{key}] Obteniendo valor")
-        return self.storage_data.get(key)
-
-    def set_value(self, key: str, value: Any) -> bool:
-        """Establece un valor en el storage"""
+    def set_value(self, key: str, value: Any, install_id: str) -> bool:
+        """Establece un valor en el storage para un usuario específico"""
         try:
             timestamp = time.strftime('%Y-%m-%d %H:%M:%S')
             logger.debug(f"\n{'='*50}")
-            logger.debug(f"⏱️ [{timestamp}] Iniciando operación para {key}")
+            logger.debug(f"⏱️ [{timestamp}] Iniciando operación para {key} (Usuario: {install_id})")
             logger.debug(f"{'='*50}")
 
             # Validar que la key sea permitida
-            allowed_keys = ['searchConfig', 'openaiApiKey', 'installTimestamp', 'openai_test_data', 'ontologyResults']
+            allowed_keys = ['searchConfig', 'openaiApiKey', 'installTimestamp', 'ontologyResults']
             if key not in allowed_keys:
                 logger.error(f"❌ [Storage] Key no permitida: {key}")
                 return False
@@ -91,27 +78,37 @@ class StorageService(LazyLoadService):
                 logger.error(f"❌ [Storage:{key}] Error de validación: {validation_result['error']}")
                 return False
 
+            # Si es API key, encriptar antes de almacenar
+            if key == 'openaiApiKey' and value:
+                if not install_id:
+                    logger.error("❌ No hay installId para encriptar API key")
+                    return False
+                    
+                from .encryption_service import encryption_service
+                value = encryption_service.encrypt(value, install_id)
+                if not value:
+                    logger.error("❌ Error encriptando API key")
+                    return False
+
+            # Obtener almacenamiento del usuario
+            user_storage = self._get_user_storage(install_id)
+
             # Log del valor si ha cambiado
-            if self._has_value_changed(key, value):
-                # Formatear el valor para el log según el tipo
+            if self._has_value_changed(key, value, install_id):
                 log_value = self._format_value_for_log(key, value)
                 size = self._get_value_size(value)
-                logger.info(f"📥 [Storage:{key}] Nuevo valor recibido")
+                logger.info(f"📥 [Storage:{key}] Nuevo valor recibido para usuario {install_id}")
                 logger.info(f"📊 Tamaño: {size} bytes")
                 logger.info(f"📝 Contenido:\n{log_value}")
                 self.last_values[key] = value
 
             # Actualizar valor
-            if key == 'searchConfig':
-                self.storage_data[key] = value.get('value', value)
-            else:
-                self.storage_data[key] = value
+            user_storage[key] = value
 
             logger.info(f"💾 [Storage:{key}] Almacenado correctamente en {timestamp}")
             
-            # Emitir actualización solo si no es un dato temporal de test
-            if key != 'openai_test_data':
-                self.emit_update(key, value)
+            # Emitir actualización
+            self.emit_update(key, value, install_id)
                 
             logger.debug(f"{'='*50}\n")
             
@@ -184,25 +181,25 @@ class StorageService(LazyLoadService):
         """Obtiene todos los valores almacenados"""
         return self.storage_data.copy()
 
-    def get_credentials(self) -> Optional[str]:
-        """Obtiene y desencripta las credenciales de OpenAI"""
+    def get_credentials(self, install_id: str) -> Optional[str]:
+        """Obtiene las credenciales de OpenAI para un usuario específico"""
         try:
-            # Obtener credenciales encriptadas
-            encrypted_key = self.get_value('openaiApiKey')
-            install_timestamp = self.get_value('installTimestamp')
+            # Obtener datos encriptados
+            encrypted_key = self.get_value('openaiApiKey', install_id)
 
-            if not encrypted_key or not install_timestamp:
+            if not encrypted_key:
                 logger.error("❌ Credenciales no encontradas en storage")
                 return None
 
-            # Desencriptar API key
+            # Delegar desencriptación al encryption_service
             from .encryption_service import encryption_service
-            api_key = encryption_service.decrypt(encrypted_key, install_timestamp)
+            api_key = encryption_service.decrypt(encrypted_key, install_id)
 
             if not api_key:
                 logger.error("❌ Error desencriptando API key")
                 return None
 
+            # Validación básica del formato
             if not api_key.startswith('sk-'):
                 logger.error("❌ API key inválida (debe empezar con sk-)")
                 return None
@@ -212,7 +209,7 @@ class StorageService(LazyLoadService):
 
         except Exception as e:
             logger.error(f"❌ Error obteniendo credenciales: {e}")
-            return None 
+            return None
 
     def process_openai_test(self) -> Optional[Dict[str, Any]]:
         """Procesa un test de OpenAI usando los datos almacenados"""
@@ -249,6 +246,94 @@ class StorageService(LazyLoadService):
                 user_prompt=text,
                 chat_history=test_data.get('messages', []),
                 system_prompt=test_data.get('systemPrompt', '')
+            )
+
+            if not response:
+                logger.error("❌ No se obtuvo respuesta de OpenAI")
+                return None
+
+            # 6. Preparar respuesta
+            result = {
+                'status': 'success',
+                'response': response
+            }
+            
+            return result
+
+        except Exception as e:
+            logger.error(f"❌ Error procesando test OpenAI: {e}")
+            return None
+
+    def _has_value_changed(self, key: str, value: Any, install_id: str) -> bool:
+        """Comprueba si el valor ha cambiado respecto al último almacenado"""
+        if key not in self.last_values:
+            return True
+        try:
+            current = json.dumps(self.last_values[key])
+            new = json.dumps(value)
+            return current != new
+        except Exception:
+            return True
+
+    def emit_update(self, key: str, value: Any, install_id: str):
+        """Emite una actualización a través de WebSocket"""
+        try:
+            if self.websocket and hasattr(self.websocket, 'socketio'):
+                # Emitir solo al usuario correcto usando su installId
+                self.websocket.socketio.emit(
+                    'storage.value_updated',
+                    {'key': key, 'value': value},
+                    room=install_id  # Usar installId como room
+                )
+                logger.debug(f"📡 [Storage:{key}] Actualización emitida para usuario {install_id}")
+        except Exception as e:
+            logger.error(f"❌ [Storage:{key}] Error en emisión: {str(e)}")
+
+    def get_all_for_user(self, install_id: str) -> Dict[str, Any]:
+        """Obtiene todos los valores almacenados para un usuario específico"""
+        return self._get_user_storage(install_id).copy()
+
+    def process_openai_test(self, install_id: str) -> Optional[Dict[str, Any]]:
+        """Procesa un test de OpenAI usando los datos almacenados"""
+        try:
+            # 1. Obtener datos del test
+            test_data = self.get_value('openai_test_data', install_id)
+            if not test_data:
+                logger.error("❌ No hay datos para el test OpenAI")
+                return None
+
+            # 2. Validar datos necesarios
+            text = test_data.get('text')
+            if not text:
+                logger.error("❌ No se proporcionó texto para la consulta")
+                return None
+
+            # 3. Obtener OpenAI service de forma lazy
+            from .openai_service import openai_service
+            if not openai_service:
+                logger.error("❌ No se pudo obtener OpenAI service")
+                return None
+
+            # 4. Inicializar si es necesario
+            if not openai_service.initialized:
+                logger.info("🔄 Inicializando OpenAI service...")
+                if not openai_service.initialize():
+                    logger.error("❌ Error inicializando OpenAI service")
+                    return None
+                logger.info("✅ OpenAI service inicializado")
+
+            # 5. Procesar consulta usando las credenciales del usuario
+            api_key = self.get_credentials(install_id)
+            if not api_key:
+                logger.error("❌ No se encontraron credenciales válidas")
+                return None
+
+            logger.info("🔄 Procesando consulta OpenAI...")
+            response = openai_service.process_query(
+                user_prompt=text,
+                chat_history=test_data.get('messages', []),
+                system_prompt=test_data.get('systemPrompt', ''),
+                api_key=api_key
             )
 
             if not response:

@@ -1,4 +1,4 @@
-import { apiKeyService } from '../services/api-key.service.js';
+import { apiKeyService } from '../../static/js/services/api-key.service.js';
 import { io } from 'https://cdn.socket.io/4.7.2/socket.io.esm.min.js';
 
 let testRunning = false;

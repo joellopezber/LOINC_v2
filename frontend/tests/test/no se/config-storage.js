@@ -1,6 +1,6 @@
-import { storage } from '../utils/storage.js';
-import { notifications } from '../utils/notifications.js';
-import { DEFAULT_CONFIG } from '../config/default-config.js';
+import { storage } from '../../../static/js/utils/storage.js';
+import { notifications } from '../../../static/js/utils/notifications.js';
+import { DEFAULT_CONFIG } from '../../../static/js/config/default-config.js';
 
 export class ConfigStorage {
     constructor() {

@@ -1,575 +1,306 @@
 import { storage } from '../utils/storage.js';
+import { websocketService } from './websocket.service.js';
 
-/**
- * Servicio para gestionar el almacenamiento local con sincronización WebSocket
- */
-class StorageService {
-    constructor() {
-        this.logger = this._createLogger();
-        this.logger.debug('Creando instancia...');
-        this.initialized = false;
-        this.initializing = false;
-        this.lastSyncTime = 0;
-        this.pendingSync = false;
-        this.syncQueue = [];
-        this.configCache = null;
-        this.configCacheTime = 0;
-        this.configCacheTimeout = 1000; // 1 segundo
-        this.updateTimeout = null;
-        this.initPromise = null;
-        this.ignoreNextUpdate = false;
-        this.wsConfigured = false;
-
-        // Escuchar eventos de storage.js con debounce
-        window.addEventListener('storage:config_updated', async () => {
-            if (this.ignoreNextUpdate) {
-                this.ignoreNextUpdate = false;
-                return;
-            }
-
-            this.logger.debug('Configuración actualizada en storage.js');
-            
-            // Cancelar timeout anterior si existe
-            if (this.updateTimeout) {
-                clearTimeout(this.updateTimeout);
-            }
-
-            // Esperar 100ms antes de sincronizar para agrupar actualizaciones
-            this.updateTimeout = setTimeout(async () => {
-                await this.queueSync();
-            }, 100);
-        });
-
-        // Configuración de tipos de almacenamiento
-        this.storageTypes = {
-            'searchConfig': {
-                sync: true,
-                cache: true,
-                validate: (value) => {
-                    // Validación específica para searchConfig
-                    return value && typeof value === 'object';
-                }
-            },
-            'ontologyResults': {
-                sync: true,
-                cache: true,
-                validate: (value) => {
-                    // Validación específica para ontologyResults
-                    return value && typeof value === 'object';
-                }
-            },
-            'apiKey': {
-                sync: true,
-                encrypt: true,
-                validate: (value) => {
-                    // Validación específica para apiKey
-                    return typeof value === 'string';
-                }
-            }
-        };
+// Clase para manejar el logging interno del servicio
+class StorageLogger {
+    constructor(prefix = '[StorageService]') {
+        this.prefix = prefix;
     }
 
-    /**
-     * Inicializa el servicio y sincroniza con el backend
-     */
-    async initialize() {
-        // Si ya hay una inicialización en curso, retornar la promesa existente
-        if (this.initPromise) {
-            this.logger.debug('Inicialización en curso...');
-            return this.initPromise;
-        }
+    debug(...args) { console.debug(this.prefix, ...args); }
+    info(...args) { console.info(this.prefix, ...args); }
+    warn(...args) { console.warn(this.prefix, ...args); }
+    error(...args) { console.error(this.prefix, ...args); }
+}
 
-        // Si ya está inicializado, retornar inmediatamente
-        if (this.initialized) {
-            this.logger.debug('Servicio ya inicializado');
-            return true;
-        }
-
-        this.initPromise = (async () => {
-            try {
-                this.initializing = true;
-                this.logger.debug('Iniciando servicio...');
-                
-                // Inicializar storage.js primero
-                await storage.initialize();
-                
-                // Obtener configuración inicial
-                const config = await storage.getConfig();
-                this.logger.debug('Config inicial', config);
-
-                // Esperar a que el WebSocket esté disponible
-                await this._waitForWebSocket();
-
-                // Configurar WebSocket solo si no está ya configurado
-                if (!this.wsConfigured) {
-                    this._setupWebSocket();
-                    this.wsConfigured = true;
-                }
-
-                // Sincronizar con el backend
-                if (window.socket?.connected) {
-                    await this._syncWithServer();
-                }
-
-                this.initialized = true;
-                this.logger.debug('✅ Servicio inicializado');
-                return true;
-            } catch (error) {
-                this.logger.error('Error en inicialización', error);
-                return false;
-            } finally {
-                this.initializing = false;
-                this.initPromise = null;
-            }
-        })();
-
-        return this.initPromise;
+// Clase para manejar la caché interna
+class StorageCache {
+    constructor(logger) {
+        this.logger = logger;
+        this.cache = new Map();
+        this.timeouts = new Map();
+        this.defaultTTL = 1000; // 1 segundo por defecto
     }
 
-    /**
-     * Espera a que el WebSocket esté disponible
-     */
-    async _waitForWebSocket() {
-        if (window.socket?.connected) {
-            return;
-        }
-
-        return new Promise((resolve) => {
-            const checkInterval = setInterval(() => {
-                if (window.socket?.connected) {
-                    clearInterval(checkInterval);
-                    resolve();
-                }
-            }, 100);
-
-            // Timeout después de 5 segundos
-            setTimeout(() => {
-                clearInterval(checkInterval);
-                resolve();
-            }, 5000);
-        });
-    }
-
-    /**
-     * Crea un logger consistente
-     */
-    _createLogger() {
-        const formatValue = (value) => {
-            if (typeof value === 'object') {
-                // Limitar la profundidad del objeto para logs más limpios
-                const keys = Object.keys(value);
-                if (keys.length > 3) {
-                    return `{${keys.slice(0, 3).join(', ')}...}`;
-                }
-                return `{${keys.join(', ')}}`;
-            }
-            return value;
-        };
-
-        // Evitar logs duplicados
-        let lastMsg = '';
-        let lastTime = 0;
-        const DUPLICATE_TIMEOUT = 1000; // 1 segundo
-
-        const shouldLog = (msg) => {
+    get(key) {
+        if (this.cache.has(key)) {
             const now = Date.now();
-            if (msg === lastMsg && now - lastTime < DUPLICATE_TIMEOUT) {
-                return false;
+            const { value, expiry } = this.cache.get(key);
+            if (now < expiry) {
+                return value;
             }
-            lastMsg = msg;
-            lastTime = now;
-            return true;
-        };
-
-        return {
-            info: (msg, data) => {
-                if (!shouldLog(msg)) return;
-                if (data) {
-                    console.log(`💾 [Storage] ${msg}`, formatValue(data));
-                } else {
-                    console.log(`💾 [Storage] ${msg}`);
-                }
-            },
-            error: (msg, error) => {
-                // Siempre mostrar errores
-                if (error) {
-                    console.error(`❌ [Storage] ${msg}`, error);
-                } else {
-                    console.error(`❌ [Storage] ${msg}`);
-                }
-            },
-            debug: (msg, data) => {
-                if (!shouldLog(msg)) return;
-                if (data) {
-                    console.debug(`🔍 [Storage] ${msg}`, formatValue(data));
-                } else {
-                    console.debug(`🔍 [Storage] ${msg}`);
-                }
-            },
-            warn: (msg, data) => {
-                // Siempre mostrar warnings
-                if (data) {
-                    console.warn(`⚠️ [Storage] ${msg}`, formatValue(data));
-                } else {
-                    console.warn(`⚠️ [Storage] ${msg}`);
-                }
-            }
-        };
+            this.cache.delete(key);
+        }
+        return null;
     }
 
-    /**
-     * Configura los manejadores de eventos del WebSocket
-     */
-    _setupWebSocket() {
-        if (!window.socket) {
-            this.logger.error('WebSocket no disponible');
-            return;
+    set(key, value, ttl = this.defaultTTL) {
+        const expiry = Date.now() + ttl;
+        this.cache.set(key, { value, expiry });
+        
+        // Limpiar caché anterior si existe
+        if (this.timeouts.has(key)) {
+            clearTimeout(this.timeouts.get(key));
         }
-
-        // Escuchar actualizaciones del servidor
-        window.socket.on('storage.value_updated', async (data) => {
-            const { key, value } = data;
-            
-            // Evitar bucles de actualización
-            if (this.pendingSync) {
-                this.logger.debug('⏳ Actualización ignorada - sincronización en curso');
-                return;
-            }
-
-            try {
-                this.ignoreNextUpdate = true;
-                switch(key) {
-                    case 'searchConfig':
-                        await storage.setConfig(value);
-                        this.logger.debug('✅ Config actualizada');
-                        break;
-                    case 'openaiApiKey':
-                        localStorage.setItem('openaiApiKey', value);
-                        this.logger.debug('✅ API key actualizada');
-                        break;
-                    case 'installTimestamp':
-                        localStorage.setItem('installTimestamp', value);
-                        this.logger.debug('✅ Timestamp actualizado');
-                        break;
-                    case 'ontologyResults':
-                        localStorage.setItem('ontologyResults', JSON.stringify(value));
-                        this.logger.debug('✅ Resultados de ontología actualizados');
-                        break;
-                }
-            } catch (error) {
-                this.logger.error('Error actualizando valor', error);
-            }
-        });
-
-        // Escuchar reconexión
-        window.socket.on('connect', async () => {
-            // Evitar sincronización si ya hay una en curso
-            if (this.pendingSync) {
-                this.logger.debug('⏳ Reconexión ignorada - sincronización en curso');
-                return;
-            }
-            
-            this.logger.info('🔄 Reconectado - sincronizando...');
-            await this.queueSync({ force: true });
-        });
-
-        // Escuchar desconexión
-        window.socket.on('disconnect', () => {
-            this.logger.warn('🔌 Desconectado del servidor');
-        });
+        
+        // Configurar limpieza automática
+        const timeout = setTimeout(() => {
+            this.cache.delete(key);
+            this.timeouts.delete(key);
+        }, ttl);
+        
+        this.timeouts.set(key, timeout);
     }
 
-    /**
-     * Añade una sincronización a la cola
-     */
-    async queueSync(options = { force: false }) {
-        // Si ya hay una sincronización pendiente en la cola y no es forzada, usar esa
-        if (this.syncQueue.length > 0 && !options.force) {
-            return new Promise((resolve) => {
-                this.syncQueue.push(resolve);
-            });
-        }
-
-        // Si es forzada, limpiar cola anterior
-        if (options.force) {
-            this.syncQueue = [];
-        }
-
-        return new Promise((resolve) => {
-            this.syncQueue.push(resolve);
-            this.processQueue();
-        });
-    }
-
-    /**
-     * Procesa la cola de sincronización
-     */
-    async processQueue() {
-        if (this.pendingSync || this.syncQueue.length === 0) {
-            return;
-        }
-
-        this.pendingSync = true;
-        let success = false;
-
-        try {
-            success = await this._syncWithServer();
-            
-            // Notificar a todos los que están esperando
-            const resolvers = [...this.syncQueue];
-            this.syncQueue = [];
-            
-            resolvers.forEach(resolve => resolve(success));
-        } catch (error) {
-            this.logger.error('Error procesando cola:', error);
-            // Notificar error a todos los que están esperando
-            const resolvers = [...this.syncQueue];
-            this.syncQueue = [];
-            resolvers.forEach(resolve => resolve(false));
-        } finally {
-            this.pendingSync = false;
-            
-            // Si hay nuevas solicitudes, esperar un poco antes de procesar
-            if (this.syncQueue.length > 0) {
-                setTimeout(() => this.processQueue(), 100);
+    clear(key) {
+        if (key) {
+            this.cache.delete(key);
+            if (this.timeouts.has(key)) {
+                clearTimeout(this.timeouts.get(key));
+                this.timeouts.delete(key);
             }
-        }
-    }
-
-    /**
-     * Sincroniza con el servidor después de reconexión
-     */
-    async _syncWithServer() {
-        try {
-            // Evitar sincronizaciones muy frecuentes (mínimo 1 segundo entre cada una)
-            const now = Date.now();
-            const timeSinceLastSync = now - this.lastSyncTime;
-            
-            if (timeSinceLastSync < 1000) {
-                const waitTime = 1000 - timeSinceLastSync;
-                this.logger.debug(`⏳ Sincronización pospuesta - esperando ${waitTime}ms`);
-                await new Promise(resolve => setTimeout(resolve, waitTime));
-            }
-
-            // Solo sincronizar si hay conexión WebSocket
-            if (!window.socket?.connected) {
-                this.logger.warn('🔌 WebSocket no conectado - sincronización pospuesta');
-                return false;
-            }
-
-            // Obtener valores actuales
-            const [config, apiKey, timestamp, ontologyResults] = await Promise.all([
-                this.getSearchConfig(),
-                localStorage.getItem('openaiApiKey'),
-                localStorage.getItem('installTimestamp'),
-                this.get('ontologyResults')  // Añadimos ontologyResults
-            ]);
-
-            if (!config && !apiKey && !timestamp && !ontologyResults) {
-                this.logger.debug('⏭️ Nada que sincronizar');
-                return true;
-            }
-
-            this.lastSyncTime = Date.now();
-            const syncId = `sync_${this.lastSyncTime}`;
-            
-            this.logger.debug('📤 Sincronizando valores...');
-
-            // Enviar valores en paralelo
-            const promises = [];
-            
-            if (config) {
-                promises.push(new Promise((resolve) => {
-                    window.socket.emit('storage.set_value', {
-                        key: 'searchConfig',
-                        value: config,
-                        request_id: `${syncId}_config`
-                    });
-                    resolve();
-                }));
-            }
-
-            if (apiKey) {
-                promises.push(new Promise((resolve) => {
-                    window.socket.emit('storage.set_value', {
-                        key: 'openaiApiKey',
-                        value: apiKey,
-                        request_id: `${syncId}_apikey`
-                    });
-                    resolve();
-                }));
-            }
-
-            if (timestamp) {
-                promises.push(new Promise((resolve) => {
-                    window.socket.emit('storage.set_value', {
-                        key: 'installTimestamp',
-                        value: timestamp,
-                        request_id: `${syncId}_timestamp`
-                    });
-                    resolve();
-                }));
-            }
-
-            // Añadir sincronización de ontologyResults
-            if (ontologyResults) {
-                promises.push(new Promise((resolve) => {
-                    window.socket.emit('storage.set_value', {
-                        key: 'ontologyResults',
-                        value: ontologyResults,
-                        request_id: `${syncId}_ontology`
-                    });
-                    resolve();
-                }));
-            }
-
-            // Esperar a que todas las operaciones terminen
-            await Promise.all(promises);
-            this.logger.debug('✅ Sincronización completada');
-            return true;
-        } catch (error) {
-            this.logger.error('❌ Error al sincronizar:', error);
-            return false;
-        }
-    }
-
-    /**
-     * Obtiene la configuración de búsqueda
-     */
-    async getSearchConfig() {
-        try {
-            // Usar caché si está disponible y no ha expirado
-            const now = Date.now();
-            if (this.configCache && now - this.configCacheTime < this.configCacheTimeout) {
-                return this.configCache;
-            }
-
-            const config = await storage.getConfig();
-            
-            // Actualizar caché
-            this.configCache = config;
-            this.configCacheTime = now;
-            
-            return config;
-        } catch (error) {
-            this.logger.error('Error al obtener configuración', error);
-            return null;
-        }
-    }
-
-    /**
-     * Guarda la configuración de búsqueda
-     */
-    async saveSearchConfig(config) {
-        try {
-            this.logger.info('Guardando nueva configuración...');
-            
-            // Ignorar el próximo evento de storage.js
-            this.ignoreNextUpdate = true;
-            await storage.setConfig(config);
-            
-            // Notificar al servidor del cambio
-            if (window.socket?.connected) {
-                await this.queueSync();
-            } else {
-                this.logger.warn('WebSocket no conectado - cambios solo guardados localmente');
-            }
-            
-            return true;
-        } catch (error) {
-            this.logger.error('Error al guardar configuración', error);
-            return false;
-        }
-    }
-
-    /**
-     * Obtiene un valor (para compatibilidad con tests)
-     */
-    async get(key) {
-        try {
-            this.logger.debug('Obteniendo valor para key:', key);
-            
-            // Verificar si el tipo de almacenamiento está soportado
-            if (!this.storageTypes[key]) {
-                this.logger.error('Tipo de almacenamiento no soportado:', key);
-                return null;
-            }
-
-            // Manejar casos especiales
-            if (key === 'searchConfig') {
-                return this.getSearchConfig();
-            }
-
-            // Obtener valor de localStorage
-            const value = localStorage.getItem(key);
-            if (!value) {
-                this.logger.debug('No hay valor almacenado para:', key);
-                return null;
-            }
-
-            // Parsear valor
-            try {
-                const parsed = JSON.parse(value);
-                this.logger.debug('Valor obtenido para ' + key + ':', parsed);
-                return parsed;
-            } catch (error) {
-                this.logger.error('Error parseando valor:', error);
-                return null;
-            }
-        } catch (error) {
-            this.logger.error('Error en get:', error);
-            return null;
-        }
-    }
-
-    /**
-     * Establece un valor (para compatibilidad con tests)
-     */
-    async set(key, value) {
-        try {
-            this.logger.debug('Guardando valor para key:', key);
-            this.logger.debug('Valor a guardar:', value);
-
-            // Verificar si el tipo de almacenamiento está soportado
-            if (!this.storageTypes[key]) {
-                this.logger.error('Tipo de almacenamiento no soportado:', key);
-                return false;
-            }
-
-            // Validar valor según el tipo
-            if (!this.storageTypes[key].validate(value)) {
-                this.logger.error('Valor inválido para ' + key + ':', value);
-                return false;
-            }
-
-            // Manejar casos especiales
-            if (key === 'searchConfig') {
-                return this.saveSearchConfig(value);
-            }
-
-            // Guardar en localStorage
-            try {
-                localStorage.setItem(key, JSON.stringify(value));
-                this.logger.debug('Valor guardado correctamente');
-
-                // Sincronizar si es necesario
-                if (this.storageTypes[key].sync && window.socket?.connected) {
-                    await this.queueSync();
-                }
-
-                return true;
-            } catch (error) {
-                this.logger.error('Error guardando valor:', error);
-                return false;
-            }
-        } catch (error) {
-            this.logger.error('Error en set:', error);
-            return false;
+        } else {
+            this.cache.clear();
+            this.timeouts.forEach(clearTimeout);
+            this.timeouts.clear();
         }
     }
 }
 
-// Crear instancia y exportar
+// Clase para manejar la validación
+class StorageValidator {
+    constructor(logger) {
+        this.logger = logger;
+        this.types = {
+            'searchConfig': {
+                sync: true,
+                cache: true,
+                validate: (value) => value && typeof value === 'object'
+            },
+            'ontologyResults': {
+                sync: true,
+                cache: true,
+                validate: (value) => value && typeof value === 'object'
+            },
+            'openaiApiKey': {
+                sync: true,
+                encrypt: true,
+                validate: (value) => typeof value === 'string'
+            },
+            'installTimestamp': {
+                sync: true,
+                cache: false,
+                validate: (value) => typeof value === 'string'
+            }
+        };
+    }
+
+    isValidType(key) {
+        return key in this.types;
+    }
+
+    validateValue(key, value) {
+        if (!this.isValidType(key)) {
+            this.logger.error('Tipo de almacenamiento no soportado:', key);
+            return false;
+        }
+
+        const validator = this.types[key].validate;
+        const isValid = validator(value);
+        
+        if (!isValid) {
+            this.logger.error('Valor inválido para ' + key + ':', value);
+        }
+        
+        return isValid;
+    }
+
+    shouldSync(key) {
+        return this.types[key]?.sync || false;
+    }
+
+    shouldCache(key) {
+        return this.types[key]?.cache || false;
+    }
+}
+
+// Clase para manejar la sincronización
+class StorageSync {
+    constructor(logger) {
+        this.logger = logger;
+        this.queue = [];
+        this.syncing = false;
+    }
+
+    async syncWithServer(data, options = {}) {
+        try {
+            if (this.syncing && !options.force) {
+                this.queue.push({ data, options });
+                return true;
+            }
+
+            this.syncing = true;
+            
+            // Enviar datos al servidor
+            const installId = localStorage.getItem('installTimestamp');
+            for (const [key, value] of Object.entries(data)) {
+                await websocketService.sendRequest('storage.set_value', {
+                    key,
+                    value,
+                    install_id: installId,
+                    force: options.force
+                });
+            }
+
+            // Procesar cola pendiente
+            while (this.queue.length > 0) {
+                const next = this.queue.shift();
+                await this.syncWithServer(next.data, next.options);
+            }
+
+            return true;
+        } catch (error) {
+            this.logger.error('Error sincronizando:', error);
+            return false;
+        } finally {
+            this.syncing = false;
+        }
+    }
+}
+
+// Clase principal del servicio
+class StorageService {
+    constructor() {
+        // Inicializar componentes internos
+        this.logger = new StorageLogger();
+        this.cache = new StorageCache(this.logger);
+        this.validator = new StorageValidator(this.logger);
+        this.sync = new StorageSync(this.logger);
+
+        // Estado del servicio
+        this.initialized = false;
+        this.initializing = false;
+
+        // Configurar eventos WebSocket
+        websocketService.on('connected', () => this._handleWebSocketConnect());
+        websocketService.on('reconnected', () => this._handleWebSocketReconnect());
+    }
+
+    async initialize() {
+        if (this.initialized) {
+            this.logger.debug('Ya inicializado, omitiendo...');
+            return true;
+        }
+        
+        if (this.initializing) {
+            this.logger.debug('Inicialización en progreso...');
+            return false;
+        }
+
+        try {
+            this.initializing = true;
+            this.logger.debug('Iniciando servicio de almacenamiento...');
+            
+            // 1. Verificar storage base
+            if (!storage.initialized) {
+                await storage.initialize();
+                this.logger.debug('Storage base inicializado');
+            } else {
+                this.logger.debug('Storage base ya estaba inicializado');
+            }
+            
+            // 2. Verificar WebSocket
+            if (!websocketService.isConnected()) {
+                await websocketService.connect();
+                this.logger.debug('WebSocket conectado');
+            } else {
+                this.logger.debug('WebSocket ya estaba conectado');
+            }
+            
+            // 3. Sincronizar datos iniciales
+            const localData = await this._getLocalData();
+            await this.sync.syncWithServer(localData);
+            this.logger.debug('Datos sincronizados');
+            
+            this.initialized = true;
+            this.logger.info('Servicio de almacenamiento inicializado correctamente');
+            return true;
+        } catch (error) {
+            this.logger.error('Error en inicialización:', error);
+            return false;
+        } finally {
+            this.initializing = false;
+        }
+    }
+
+    async get(key) {
+        if (!this.validator.isValidType(key)) return null;
+
+        // 1. Intentar obtener de caché
+        if (this.validator.shouldCache(key)) {
+            const cached = this.cache.get(key);
+            if (cached !== null) return cached;
+        }
+
+        // 2. Obtener del storage
+        const value = await storage.get(key);
+        
+        // 3. Actualizar caché si es necesario
+        if (value !== null && this.validator.shouldCache(key)) {
+            this.cache.set(key, value);
+        }
+        
+        return value;
+    }
+
+    async set(key, value) {
+        // 1. Validar
+        if (!this.validator.validateValue(key, value)) return false;
+
+        // 2. Guardar en storage
+        const success = await storage.set(key, value);
+        if (!success) return false;
+
+        // 3. Actualizar caché
+        if (this.validator.shouldCache(key)) {
+            this.cache.set(key, value);
+        }
+
+        // 4. Sincronizar si es necesario
+        if (this.validator.shouldSync(key)) {
+            await this.sync.syncWithServer({ [key]: value });
+        }
+
+        return true;
+    }
+
+    async _getLocalData() {
+        const data = {};
+        for (const key of Object.keys(this.validator.types)) {
+            // No incluir API keys en la sincronización inicial
+            if (!key.endsWith('ApiKey')) {
+                const value = await this.get(key);
+                if (value !== null) {
+                    data[key] = value;
+                }
+            }
+        }
+        return data;
+    }
+
+    async _handleWebSocketConnect() {
+        if (!this.initialized) return;
+        const localData = await this._getLocalData();
+        await this.sync.syncWithServer(localData);
+    }
+
+    async _handleWebSocketReconnect() {
+        if (!this.initialized) return;
+        const localData = await this._getLocalData();
+        await this.sync.syncWithServer(localData, { force: true });
+    }
+}
+
+// Exportar instancia única
 const storageService = new StorageService();
-window.storageService = storageService;
 export { storageService };

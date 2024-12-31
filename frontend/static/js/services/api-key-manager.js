@@ -47,14 +47,12 @@ export class ApiKeyManager {
         
         for (const provider of this.providers) {
             try {
+                const encryptedKey = await apiKeyService.getEncryptedKey(provider);
                 apiKeys[provider] = {
-                    hasKey: await apiKeyService.hasApiKey(provider),
-                    value: null
+                    hasKey: encryptedKey !== null,
+                    value: encryptedKey,
+                    decrypted: false
                 };
-                
-                if (apiKeys[provider].hasKey) {
-                    apiKeys[provider].value = await apiKeyService.getApiKey(provider);
-                }
             } catch (error) {
                 console.error(`[ApiKeyManager] Error al cargar API key de ${provider}:`, error);
                 notifications.error(`Error al cargar API key de ${provider}`);
@@ -62,6 +60,13 @@ export class ApiKeyManager {
         }
         
         return apiKeys;
+    }
+
+    async decryptApiKey(provider) {
+        const encryptedKey = await apiKeyService.getEncryptedKey(provider);
+        if (!encryptedKey) return null;
+        
+        return await apiKeyService.decryptKey(provider, encryptedKey);
     }
 
     markAsChanged() {

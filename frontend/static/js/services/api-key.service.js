@@ -1,4 +1,5 @@
 import { encryption } from '../utils/encryption.js';
+import { storageService } from './storage.service.js';
 
 class ApiKeyService {
     constructor() {
@@ -12,6 +13,22 @@ class ApiKeyService {
         this.keyCache = new Map();
         this.cacheTimeout = 5000; // 5 segundos
         this.hasKeyCache = new Map();
+    }
+
+    async getEncryptedKey(provider) {
+        // Solo obtiene la key encriptada del localStorage
+        return localStorage.getItem(`${provider}ApiKey`);
+    }
+
+    async decryptKey(provider, encryptedKey) {
+        try {
+            // Solicita desencriptación al backend via StorageService
+            const decryptedKey = await storageService.getValue(`${provider}ApiKey`);
+            return decryptedKey;
+        } catch (error) {
+            console.error(`[ApiKey] Error desencriptando ${provider}:`, error);
+            return null;
+        }
     }
 
     async _getCachedKey(provider) {

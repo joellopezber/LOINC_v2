@@ -13,11 +13,7 @@
     <!-- Socket.IO -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.min.js"></script>
     
-    <!-- Services -->
-    <script type="module" src="/static/js/services/storage.service.js"></script>
-    <script type="module" src="/static/js/services/websocket.service.js"></script>
-    
-    <!-- App Scripts -->
+    <!-- App Principal -->
     <script type="module" src="/static/js/app.js"></script>
 </head>
 <body>
@@ -58,23 +54,5 @@
         <!-- Include Config Modal -->
         {% include 'components/config-modal.html' %}
     </div>
-
-    <!-- Tests -->
-    <script type="module" src="/static/js/test/storage.test.js"></script>
-
-    <script>
-        // Inicializar servicios cuando la página cargue
-        document.addEventListener('DOMContentLoaded', async () => {
-            // Inicializar storage service
-            if (window.storageService) {
-                await window.storageService.initialize();
-            }
-            
-            // Conectar WebSocket
-            if (window.webSocketService) {
-                window.webSocketService.connect();
-            }
-        });
-    </script>
 </body>
 </html> 

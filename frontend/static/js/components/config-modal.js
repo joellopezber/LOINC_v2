@@ -1,4 +1,4 @@
-import { ConfigStorage } from '../services/config-storage.js';
+import { ConfigStorage } from '../../../tests/test/no se/config-storage.js';
 import { ApiKeyManager } from '../services/api-key-manager.js';
 import { notifications } from '../utils/notifications.js';
 
@@ -220,15 +220,36 @@ export class ConfigModal {
         // Botones de visualización
         const toggleButtons = document.querySelectorAll('.api-key-toggle');
         toggleButtons.forEach(button => {
-            button.addEventListener('click', () => {
+            button.addEventListener('click', async () => {
                 const input = button.closest('.api-key-input-group').querySelector('.api-key-input');
                 const icon = button.querySelector('.material-icons');
+                const provider = input.name.replace('ApiKey', '');
                 
                 if (input.type === 'password') {
-                    input.type = 'text';
-                    icon.textContent = 'visibility';
+                    // Al mostrar, desencriptamos
+                    button.disabled = true;
+                    icon.textContent = 'sync';
+                    icon.classList.add('rotating');
+                    
+                    try {
+                        const decryptedKey = await this.apiKeyManager.decryptApiKey(provider);
+                        if (decryptedKey) {
+                            input.type = 'text';
+                            input.value = decryptedKey;
+                            icon.textContent = 'visibility';
+                        } else {
+                            notifications.error('No se pudo desencriptar la API key');
+                        }
+                    } catch (error) {
+                        notifications.error('Error al desencriptar la API key');
+                    } finally {
+                        button.disabled = false;
+                        icon.classList.remove('rotating');
+                    }
                 } else {
+                    // Al ocultar, volvemos a mostrar la versión encriptada
                     input.type = 'password';
+                    input.value = await this.apiKeyManager.getEncryptedKey(provider);
                     icon.textContent = 'visibility_off';
                 }
             });

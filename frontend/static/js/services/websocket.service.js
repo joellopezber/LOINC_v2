@@ -17,179 +17,157 @@ class WebSocketService {
         }
         this.socket = null;
         this.connected = false;
+        this.connecting = false;
         this.pendingRequests = new Map();
         this.requestId = 0;
+        this.eventHandlers = new Map();
         WebSocketService.instance = this;
+    }
+
+    /**
+     * Registra un manejador de eventos
+     */
+    on(event, handler) {
+        if (!this.eventHandlers.has(event)) {
+            this.eventHandlers.set(event, new Set());
+        }
+        this.eventHandlers.get(event).add(handler);
+    }
+
+    /**
+     * Elimina un manejador de eventos
+     */
+    off(event, handler) {
+        if (this.eventHandlers.has(event)) {
+            this.eventHandlers.get(event).delete(handler);
+        }
+    }
+
+    /**
+     * Emite un evento a todos los manejadores registrados
+     */
+    _emit(event, data) {
+        if (this.eventHandlers.has(event)) {
+            this.eventHandlers.get(event).forEach(handler => handler(data));
+        }
     }
 
     /**
      * Inicia la conexión WebSocket
      */
     async connect() {
-        // Si ya hay una conexión activa, retornarla
-        if (this.socket?.connected) {
+        if (this.isConnected()) {
             console.debug('🔌 Reutilizando conexión WebSocket existente');
             return this.socket;
         }
 
-        return new Promise((resolve, reject) => {
-            try {
-                if (!this.socket) {
-                    console.debug('🔌 Creando nueva conexión WebSocket');
-                    this.socket = io('http://localhost:5001', {
-                        transports: ['websocket'],
-                        reconnection: true,
-                        reconnectionAttempts: 10,
-                        reconnectionDelay: 500,
-                        timeout: 10000,
-                        // Permitir reutilización de conexiones
-                        multiplex: true,
-                        // No forzar nueva conexión
-                        forceNew: false,
-                        autoConnect: false
-                    });
+        if (this.connecting) {
+            console.debug('🔌 Conexión en progreso...');
+            return new Promise((resolve) => {
+                this.once('connected', () => resolve(this.socket));
+            });
+        }
 
-                    window.socket = this.socket;
-                    this.setupEventHandlers();
-                    this.socket.connect();
-                }
+        try {
+            this.connecting = true;
+            console.debug('🔌 Creando nueva conexión WebSocket');
+            
+            this.socket = io({
+                transports: ['websocket'],
+                reconnection: true,
+                reconnectionDelay: 1000,
+                reconnectionDelayMax: 5000,
+                reconnectionAttempts: Infinity
+            });
 
-                // Timeout para la conexión
-                const timeout = setTimeout(() => {
-                    if (!this.socket.connected) {
-                        console.warn('⚠️ Timeout en conexión - reintentando...');
-                        this.socket.connect();
-                    }
-                }, 5000);
-
-                this.socket.once('connect', () => {
-                    clearTimeout(timeout);
-                    console.log('🔌 Conectado al servidor WebSocket');
+            await new Promise((resolve, reject) => {
+                this.socket.on('connect', () => {
                     this.connected = true;
+                    console.debug('🔌 Conectado al servidor WebSocket');
+                    this._setupEventHandlers();
+                    this._emit('connected');
                     resolve(this.socket);
                 });
 
-                this.socket.once('connect_error', (error) => {
-                    clearTimeout(timeout);
-                    console.error('❌ Error de conexión:', error);
-                    // No rechazar inmediatamente, permitir reintentos
-                    if (!this.socket.connected) {
-                        this.socket.connect();
-                    }
+                this.socket.on('connect_error', (error) => {
+                    console.error('🔌 Error de conexión WebSocket:', error);
+                    reject(error);
                 });
 
-            } catch (error) {
-                console.error('❌ Error inicializando WebSocket:', error);
-                reject(error);
-            }
-        });
+                this.socket.on('disconnect', () => {
+                    this.connected = false;
+                    console.warn('🔌 Desconectado del servidor WebSocket');
+                    this._emit('disconnected');
+                });
+
+                this.socket.on('reconnect', () => {
+                    this.connected = true;
+                    console.info('🔌 Reconectado al servidor WebSocket');
+                    this._setupEventHandlers();
+                    this._emit('reconnected');
+                });
+            });
+
+            return this.socket;
+        } catch (error) {
+            console.error('🔌 Error estableciendo conexión WebSocket:', error);
+            throw error;
+        } finally {
+            this.connecting = false;
+        }
+    }
+
+    isConnected() {
+        return this.socket && this.socket.connected && this.connected;
     }
 
     /**
-     * Configura los manejadores de eventos
+     * Configura los manejadores de eventos básicos
      */
-    setupEventHandlers() {
+    _setupEventHandlers() {
         if (!this.socket) return;
 
-        // Limpiar listeners anteriores
         this.socket.removeAllListeners();
 
-        // Manejar respuesta de valor
-        this.socket.on('storage_value', (data) => {
-            console.debug('📦 Valor recibido:', this._formatLogValue(data));
-            this.resolveRequest(data);
-        });
-
-        // Manejar respuesta de set_value
-        this.socket.on('storage.value_set', (data) => {
-            console.debug('💾 Valor guardado:', this._formatLogValue(data));
-            this.resolveRequest(data);
-        });
-
-        // Manejar reconexión
-        let reconnectAttempts = 0;
-        
-        this.socket.on('reconnect_attempt', (attemptNumber) => {
-            reconnectAttempts = attemptNumber;
-            console.debug(`🔄 Intento de reconexión #${attemptNumber}`);
-        });
-
-        this.socket.on('reconnect', () => {
-            console.log(`🔄 Reconectado después de ${reconnectAttempts} intentos`);
-            this.connected = true;
-            reconnectAttempts = 0;
-            // Notificar reconexión exitosa
-            window.dispatchEvent(new CustomEvent('websocket:reconnected'));
-        });
-
+        // Eventos básicos
         this.socket.on('disconnect', (reason) => {
             console.log(`🔌 Desconectado del servidor (${reason})`);
             this.connected = false;
-            // Notificar desconexi��n
-            window.dispatchEvent(new CustomEvent('websocket:disconnected'));
+            this._emit('disconnected', reason);
         });
-    }
 
-    /**
-     * Formatea valores para logging
-     */
-    _formatLogValue(data) {
-        if (!data) return data;
-        
-        // Crear copia para no modificar el original
-        const logData = { ...data };
-        
-        // Ocultar valores sensibles
-        if (logData.key === 'openaiApiKey') {
-            logData.value = '********';
-        }
-        
-        // Truncar valores largos
-        if (typeof logData.value === 'string' && logData.value.length > 50) {
-            logData.value = logData.value.substring(0, 50) + '...';
-        }
-        
-        return logData;
-    }
+        this.socket.on('reconnect', (attemptNumber) => {
+            console.log(`🔄 Reconectado después de ${attemptNumber} intentos`);
+            this.connected = true;
+            this._emit('reconnected', attemptNumber);
+        });
 
-    /**
-     * Resuelve una petición pendiente
-     */
-    resolveRequest(data) {
-        const requestId = data.request_id;
-        if (this.pendingRequests.has(requestId)) {
-            const { resolve, timeout } = this.pendingRequests.get(requestId);
-            clearTimeout(timeout);
-            resolve(data);
-            this.pendingRequests.delete(requestId);
-        }
-    }
+        // Manejar respuestas del servidor
+        this.socket.on('storage.value_set', (response) => {
+            const { request_id, status, error } = response;
+            const request = this.pendingRequests.get(request_id);
+            
+            if (request) {
+                clearTimeout(request.timeout);
+                if (status === 'success') {
+                    request.resolve(response);
+                } else {
+                    request.reject(new Error(error || 'Error desconocido'));
+                }
+                this.pendingRequests.delete(request_id);
+            }
+        });
 
-    /**
-     * Cierra la conexión WebSocket
-     */
-    async disconnect() {
-        if (this.socket?.connected) {
-            this.socket.disconnect();
-            this.socket = null;
-            window.socket = null;
-            this.connected = false;
-            console.log('🔌 Desconexión manual del WebSocket');
-        }
-    }
+        // Manejar actualizaciones de valores
+        this.socket.on('storage.value_updated', (data) => {
+            this._emit('value_updated', data);
+        });
 
-    /**
-     * Obtiene el valor de una clave almacenada
-     */
-    async getValue(key) {
-        return this.sendRequest('storage.get_value', { key });
-    }
-
-    /**
-     * Establece el valor de una clave
-     */
-    async setValue(key, value) {
-        return this.sendRequest('storage.set_value', { key, value });
+        // Manejar errores
+        this.socket.on('error', (error) => {
+            console.error('❌ Error en WebSocket:', error);
+            this._emit('error', error);
+        });
     }
 
     /**
@@ -201,6 +179,8 @@ class WebSocketService {
         }
 
         const requestId = `req_${this.requestId++}`;
+        const install_id = localStorage.getItem('installTimestamp');
+
         return new Promise((resolve, reject) => {
             const timeout = setTimeout(() => {
                 this.pendingRequests.delete(requestId);
@@ -208,8 +188,27 @@ class WebSocketService {
             }, 5000);
 
             this.pendingRequests.set(requestId, { resolve, reject, timeout });
-            this.socket.emit(event, { ...data, request_id: requestId });
+            
+            // Incluir install_id en cada petición
+            this.socket.emit(event, { 
+                ...data, 
+                request_id: requestId,
+                install_id: install_id  // ✅ Nombre correcto del parámetro
+            });
         });
+    }
+
+    /**
+     * Cierra la conexión WebSocket
+     */
+    async disconnect() {
+        if (this.socket?.connected) {
+            this.socket.disconnect();
+            this.socket = null;
+            window.socket = null;
+            this.connected = false;
+            this._emit('disconnected', 'manual');
+        }
     }
 }
 

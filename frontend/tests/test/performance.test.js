@@ -1,6 +1,6 @@
-import { storage } from '../utils/storage.js';
-import { encryption } from '../utils/encryption.js';
-import { apiKeyService } from '../services/api-key.service.js';
+import { storage } from '../../static/js/utils/storage.js';
+import { encryption } from '../../static/js/utils/encryption.js';
+import { apiKeyService } from '../../static/js/services/api-key.service.js';
 
 class PerformanceTest {
     constructor() {

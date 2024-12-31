@@ -1,4 +1,4 @@
-import { encryption } from '../utils/encryption.js';
+import { encryption } from '../../static/js/utils/encryption.js';
 import { io } from 'https://cdn.socket.io/4.7.2/socket.io.esm.min.js';
 
 let testRunning = false;

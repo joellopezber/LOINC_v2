@@ -1,4 +1,3 @@
-import { encryption } from './encryption.js';
 import { DEFAULT_CONFIG } from '../config/default-config.js';
 
 // Esquema de validación
@@ -48,13 +47,10 @@ const configSchema = {
     }
 };
 
-class StorageService {
+class LocalStorage {
     constructor() {
-        console.debug('[Storage] Creando instancia...');
-        this.config = null;
+        console.debug('[LocalStorage] Creando instancia...');
         this.initialized = false;
-        this.initPromise = null;
-        this.logger = console;
         
         // Asegurar que installTimestamp existe
         if (!localStorage.getItem('installTimestamp')) {
@@ -63,72 +59,115 @@ class StorageService {
     }
 
     /**
-     * Inicializa el almacenamiento
+     * Inicializa el almacenamiento local
      */
     async initialize() {
-        // Si ya hay una inicialización en curso, retornar la promesa existente
-        if (this.initPromise) {
-            console.debug('[Storage] Inicialización en curso...');
-            return this.initPromise;
-        }
-
-        // Si ya está inicializado, retornar inmediatamente
         if (this.initialized) {
-            console.debug('[Storage] Ya inicializado');
+            console.debug('[LocalStorage] Ya inicializado, omitiendo...');
             return true;
         }
 
-        this.initPromise = (async () => {
-            try {
-                console.debug('[Storage] Iniciando...');
-                
-                // Cargar configuración inicial
-                await this._loadConfig();
-                
-                this.initialized = true;
-                console.debug('[Storage] ✅ Inicializado');
-                return true;
-            } catch (error) {
-                console.error('[Storage] Error en inicialización:', error);
-                return false;
-            } finally {
-                this.initPromise = null;
-            }
-        })();
-
-        return this.initPromise;
-    }
-
-    async _loadConfig() {
         try {
-            const existingConfig = localStorage.getItem('searchConfig');
-            
-            if (!existingConfig) {
-                console.debug('[Storage] Primera inicialización, usando valores por defecto');
-                await this.setConfig(DEFAULT_CONFIG);
-                return DEFAULT_CONFIG;
-            }
-
-            const parsedConfig = JSON.parse(existingConfig);
-            if (!this.validateConfig(parsedConfig)) {
-                console.warn('[Storage] Configuración inválida, restaurando valores por defecto');
-                await this.setConfig(DEFAULT_CONFIG);
-                return DEFAULT_CONFIG;
-            }
-
-            return parsedConfig;
+            console.debug('[LocalStorage] Iniciando...');
+            await this._loadConfig();
+            this.initialized = true;
+            console.debug('[LocalStorage] ✅ Inicializado correctamente');
+            return true;
         } catch (error) {
-            console.error('[Storage] Error cargando configuración:', error);
-            await this.setConfig(DEFAULT_CONFIG);
-            return DEFAULT_CONFIG;
+            console.error('[LocalStorage] Error en inicialización:', error);
+            return false;
         }
     }
 
+    /**
+     * Obtiene un valor del localStorage
+     */
+    get(key) {
+        try {
+            const value = localStorage.getItem(key);
+            if (!value) return null;
+
+            // Si es una API key, devolver el valor encriptado sin parsear
+            if (key.endsWith('ApiKey')) {
+                return value;
+            }
+
+            // Para el resto de valores, parsear JSON
+            return JSON.parse(value);
+        } catch (error) {
+            console.error(`[LocalStorage] Error obteniendo ${key}:`, error);
+            return null;
+        }
+    }
+
+    /**
+     * Guarda un valor en localStorage
+     */
+    set(key, value) {
+        try {
+            // Si es una API key, guardar el valor encriptado directamente
+            if (key.endsWith('ApiKey')) {
+                localStorage.setItem(key, value);
+            } else {
+                // Para el resto de valores, convertir a JSON
+                localStorage.setItem(key, JSON.stringify(value));
+            }
+            return true;
+        } catch (error) {
+            console.error(`[LocalStorage] Error guardando ${key}:`, error);
+            return false;
+        }
+    }
+
+    /**
+     * Elimina un valor del localStorage
+     */
+    remove(key) {
+        try {
+            localStorage.removeItem(key);
+            return true;
+        } catch (error) {
+            console.error(`[LocalStorage] Error eliminando ${key}:`, error);
+            return false;
+        }
+    }
+
+    /**
+     * Obtiene la configuración
+     */
+    async getConfig() {
+        return this.get('searchConfig') || DEFAULT_CONFIG;
+    }
+
+    /**
+     * Guarda la configuración
+     */
+    async setConfig(config) {
+        if (!this.validateConfig(config)) {
+            throw new Error('Configuración inválida');
+        }
+        return this.set('searchConfig', config);
+    }
+
+    /**
+     * Carga la configuración inicial
+     */
+    async _loadConfig() {
+        const config = await this.getConfig();
+        if (!this.validateConfig(config)) {
+            console.warn('[LocalStorage] Configuración inválida, restaurando valores por defecto');
+            await this.setConfig(DEFAULT_CONFIG);
+            return DEFAULT_CONFIG;
+        }
+        return config;
+    }
+
+    // Mantener los métodos de validación existentes
     validateConfigValue(value, schema) {
         try {
             if ((value === undefined || value === null) && typeof schema === 'object') {
                 if (schema.optional) return true;
-                console.warn('[Storage] Valor requerido no encontrado para schema:', schema);
+                console.warn('[LocalStorage] Valor requerido no encontrado para schema:', schema);
                 return false;
             }
 
@@ -201,7 +240,7 @@ class StorageService {
             }
             return false;
         } catch (error) {
-            console.error('[Storage] Error en validación de valor:', error);
+            console.error('[LocalStorage] Error en validación de valor:', error);
             return false;
         }
     }
@@ -210,79 +249,18 @@ class StorageService {
         try {
             const isValid = this.validateConfigValue(config, configSchema);
             if (!isValid) {
-                console.warn('[Storage] Configuración no cumple con el schema');
+                console.warn('[LocalStorage] Configuración no cumple con el schema');
             }
             return isValid;
         } catch (error) {
-            console.error('[Storage] Error en validación de configuración:', error);
+            console.error('[LocalStorage] Error en validación de configuración:', error);
             return false;
         }
     }
 
-    async getConfig() {
-        // Asegurar que el servicio está inicializado
-        if (!this.initialized) {
-            await this.initialize();
-        }
-
-        try {
-            const config = localStorage.getItem('searchConfig');
-            console.debug('Obteniendo configuración:', config);
-            return config ? JSON.parse(config) : DEFAULT_CONFIG;
-        } catch (error) {
-            console.error('Error al leer la configuración:', error);
-            return DEFAULT_CONFIG;
-        }
-    }
-
     /**
-     * Guarda la configuración en localStorage
+     * Crea un backup de la configuración
      */
-    async setConfig(config) {
-        try {
-            // Validar configuración
-            if (!this.validateConfig(config)) {
-                throw new Error('Configuración inválida');
-            }
-
-            // Guardar en localStorage
-            localStorage.setItem('searchConfig', JSON.stringify(config));
-            console.debug('Configuración guardada:', config);
-
-            // Emitir evento para que storage.service.js lo capture
-            window.dispatchEvent(new CustomEvent('storage:config_updated', { detail: config }));
-
-            return true;
-        } catch (error) {
-            console.error('Error al guardar configuración:', error);
-            throw error;
-        }
-    }
-
-    async resetConfig() {
-        try {
-            console.info('[Storage] Reseteando a valores por defecto');
-            
-            await this.createBackup();
-            
-            if (!this.validateConfig(DEFAULT_CONFIG)) {
-                console.error('[Storage] defaultConfig no es válido según el schema');
-                throw new Error('defaultConfig no es válido');
-            }
-            
-            localStorage.setItem('searchConfig', JSON.stringify(DEFAULT_CONFIG));
-            document.dispatchEvent(new CustomEvent('config:updated', { 
-                detail: { config: DEFAULT_CONFIG }
-            }));
-            
-            return true;
-        } catch (error) {
-            console.error('[Storage] Error al resetear configuración:', error);
-            throw error;
-        }
-    }
-
-    // Backup
     async createBackup() {
         try {
             const config = await this.getConfig();
@@ -290,26 +268,31 @@ class StorageService {
                 timestamp: Date.now(),
                 config: config
             };
-            localStorage.setItem('configBackup', JSON.stringify(backup));
+            this.set('configBackup', backup);
+            return true;
         } catch (error) {
-            console.error('[Storage] Error al crear backup:', error);
+            console.error('[LocalStorage] Error al crear backup:', error);
+            return false;
         }
     }
 
+    /**
+     * Restaura desde backup
+     */
     async restoreFromBackup() {
         try {
-            const backup = localStorage.getItem('configBackup');
-            if (backup) {
-                const { config } = JSON.parse(backup);
-                await this.setConfig(config);
+            const backup = this.get('configBackup');
+            if (backup?.config) {
+                await this.setConfig(backup.config);
                 return true;
             }
             return false;
         } catch (error) {
-            console.error('Error al restaurar backup:', error);
+            console.error('[LocalStorage] Error al restaurar backup:', error);
             return false;
         }
     }
 }
 
-export const storage = new StorageService(); 
+// Exportar una instancia única
+export const storage = new LocalStorage(); 
