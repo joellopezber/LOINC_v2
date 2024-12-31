@@ -1,3 +1,5 @@
+import { websocketService } from '../services/websocket.service.js';
+
 class EncryptionService {
     constructor() {
         this.MASTER_KEY_SIZE = 32; // 256 bits
@@ -70,7 +72,7 @@ class EncryptionService {
                     
                     // Obtener la master key del backend
                     let masterKey = null;
-                    if (window.socket?.connected) {
+                    if (websocketService.isConnected()) {
                         // Obtener el installTimestamp
                         const installTimestamp = localStorage.getItem('installTimestamp');
                         if (!installTimestamp) {
@@ -80,26 +82,20 @@ class EncryptionService {
                         }
 
                         console.log('[Encryption] Solicitando master key al servidor...');
-                        window.socket.emit('encryption.get_master_key', { installTimestamp });
-                        
-                        masterKey = await new Promise((resolveKey) => {
-                            const timeoutId = setTimeout(() => {
-                                window.socket.off('encryption.master_key');
-                                console.warn('[Encryption] Timeout esperando master key del servidor');
-                                resolveKey(null);
-                            }, 5000);
-
-                            window.socket.once('encryption.master_key', (data) => {
-                                clearTimeout(timeoutId);
-                                if (data.error) {
-                                    console.error('[Encryption] Error recibiendo master key:', data.error);
-                                    resolveKey(null);
-                                } else {
-                                    console.log('[Encryption] Master key recibida del servidor');
-                                    resolveKey(data.key);
-                                }
+                        try {
+                            const response = await websocketService.sendRequest('encryption.get_master_key', {
+                                installTimestamp
                             });
-                        });
+                            
+                            if (response.status === 'success' && response.key) {
+                                console.log('[Encryption] Master key recibida del servidor');
+                                masterKey = response.key;
+                            } else {
+                                console.error('[Encryption] Error recibiendo master key:', response.message);
+                            }
+                        } catch (error) {
+                            console.error('[Encryption] Error solicitando master key:', error);
+                        }
                     }
 
                     // Si no se pudo obtener del backend, intentar usar la key temporal de migración

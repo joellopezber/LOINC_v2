@@ -59,14 +59,24 @@ class WebSocketService(LazyLoadService):
                 if not isinstance(data, dict):
                     error_msg = "❌ Datos recibidos no son un diccionario válido"
                     logger.error(error_msg)
-                    emit('encryption.master_key', {'status': 'error', 'message': error_msg})
+                    emit('encryption.master_key', {
+                        'status': 'error', 
+                        'message': error_msg,
+                        'request_id': data.get('request_id')
+                    })
                     return
 
                 install_timestamp = data.get('installTimestamp')
+                request_id = data.get('request_id')
+                
                 if not install_timestamp:
                     error_msg = "❌ No se proporcionó installTimestamp"
                     logger.error(error_msg)
-                    emit('encryption.master_key', {'status': 'error', 'message': error_msg})
+                    emit('encryption.master_key', {
+                        'status': 'error', 
+                        'message': error_msg,
+                        'request_id': request_id
+                    })
                     return
 
                 # Delegar obtención de master key al encryption_service
@@ -75,13 +85,18 @@ class WebSocketService(LazyLoadService):
                 if not master_key:
                     error_msg = "❌ Error generando master key"
                     logger.error(error_msg)
-                    emit('encryption.master_key', {'status': 'error', 'message': error_msg})
+                    emit('encryption.master_key', {
+                        'status': 'error', 
+                        'message': error_msg,
+                        'request_id': request_id
+                    })
                     return
 
                 logger.info("✅ Master key generada correctamente")
                 emit('encryption.master_key', {
                     'status': 'success',
-                    'key': master_key
+                    'key': master_key,
+                    'request_id': request_id
                 })
 
             except Exception as e:
@@ -146,25 +161,40 @@ class WebSocketService(LazyLoadService):
         def handle_get_value(data: Dict[str, Any]):
             key = data.get('key')
             request_id = data.get('request_id')
+            install_id = data.get('install_id')
             
             if not self.storage:
                 error_msg = "❌ StorageService no disponible"
                 logger.error(error_msg)
                 emit('storage.value', {
-                    'error': error_msg,
+                    'status': 'error',
+                    'message': error_msg,
                     'request_id': request_id
                 })
                 return
                 
-            if key:
-                value = self.storage.get_value(key)
+            if not all([key, install_id]):
+                error_msg = "Key e install_id son requeridos"
+                logger.error(error_msg)
                 emit('storage.value', {
+                    'status': 'error',
+                    'message': error_msg,
+                    'request_id': request_id
+                })
+                return
+
+            try:
+                value = self.storage.get_value(key, install_id)
+                emit('storage.value', {
+                    'status': 'success',
                     'value': value,
                     'request_id': request_id
                 })
-            else:
+            except Exception as e:
+                logger.error(f"Error en handle_get_value: {e}")
                 emit('storage.value', {
-                    'error': 'Key not provided',
+                    'status': 'error',
+                    'message': str(e),
                     'request_id': request_id
                 })
 

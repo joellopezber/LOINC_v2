@@ -217,40 +217,39 @@ export class ConfigModal {
             });
         });
 
-        // Botones de visualización
+        // Botón para mostrar/ocultar API key
         const toggleButtons = document.querySelectorAll('.api-key-toggle');
         toggleButtons.forEach(button => {
             button.addEventListener('click', async () => {
                 const input = button.closest('.api-key-input-group').querySelector('.api-key-input');
-                const icon = button.querySelector('.material-icons');
                 const provider = input.name.replace('ApiKey', '');
-                
-                if (input.type === 'password') {
-                    // Al mostrar, desencriptamos
-                    button.disabled = true;
-                    icon.textContent = 'sync';
-                    icon.classList.add('rotating');
-                    
+                const isShowing = input.type === 'text';
+
+                if (isShowing) {
+                    // Si ya está mostrando, simplemente ocultar
+                    input.type = 'password';
+                    button.innerHTML = '<span class="material-icons">visibility_off</span>';
+                } else {
+                    // Si está oculta, desencriptar y mostrar
                     try {
+                        button.disabled = true;
+                        button.innerHTML = '<span class="material-icons rotating">sync</span>';
                         const decryptedKey = await this.apiKeyManager.decryptApiKey(provider);
+                        
                         if (decryptedKey) {
-                            input.type = 'text';
                             input.value = decryptedKey;
-                            icon.textContent = 'visibility';
+                            input.type = 'text';
+                            button.innerHTML = '<span class="material-icons">visibility</span>';
                         } else {
-                            notifications.error('No se pudo desencriptar la API key');
+                            button.innerHTML = '<span class="material-icons">visibility_off</span>';
+                            console.error(`No se pudo desencriptar la key de ${provider}`);
                         }
                     } catch (error) {
-                        notifications.error('Error al desencriptar la API key');
+                        console.error(`Error mostrando key de ${provider}:`, error);
+                        button.innerHTML = '<span class="material-icons">visibility_off</span>';
                     } finally {
                         button.disabled = false;
-                        icon.classList.remove('rotating');
                     }
-                } else {
-                    // Al ocultar, volvemos a mostrar la versión encriptada
-                    input.type = 'password';
-                    input.value = await this.apiKeyManager.getEncryptedKey(provider);
-                    icon.textContent = 'visibility_off';
                 }
             });
         });

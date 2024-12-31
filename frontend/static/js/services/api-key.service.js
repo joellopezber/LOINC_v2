@@ -1,5 +1,6 @@
 import { encryption } from '../utils/encryption.js';
 import { storageService } from './storage.service.js';
+import { websocketService } from './websocket.service.js';
 
 class ApiKeyService {
     constructor() {
@@ -13,6 +14,7 @@ class ApiKeyService {
         this.keyCache = new Map();
         this.cacheTimeout = 5000; // 5 segundos
         this.hasKeyCache = new Map();
+        this.masterKeyPromise = null;
     }
 
     async getEncryptedKey(provider) {
@@ -20,11 +22,77 @@ class ApiKeyService {
         return localStorage.getItem(`${provider}ApiKey`);
     }
 
+    async getMasterKey() {
+        try {
+            // Si ya hay una solicitud en curso, esperar
+            if (this.masterKeyPromise) {
+                console.debug('[ApiKey] Reutilizando solicitud de master key en curso...');
+                return await this.masterKeyPromise;
+            }
+
+            const install_id = localStorage.getItem('installTimestamp');
+            if (!install_id) {
+                throw new Error('No se encontró install_id');
+            }
+
+            console.debug('[ApiKey] Solicitando master key...', { install_id });
+            
+            // Crear nueva promesa para la solicitud
+            this.masterKeyPromise = new Promise(async (resolve, reject) => {
+                try {
+                    console.debug('[ApiKey] Enviando solicitud encryption.get_master_key...');
+                    const response = await websocketService.sendRequest('encryption.get_master_key', {
+                        installTimestamp: install_id
+                    });
+
+                    console.debug('[ApiKey] Respuesta recibida:', { 
+                        status: response?.status,
+                        hasKey: response?.key ? 'sí' : 'no'
+                    });
+
+                    if (!response || response.status === 'error') {
+                        throw new Error(response?.message || 'Error obteniendo master key');
+                    }
+
+                    console.debug('[ApiKey] Master key recibida correctamente');
+                    resolve(response.key);
+                } catch (error) {
+                    console.error('[ApiKey] Error en solicitud de master key:', error);
+                    reject(error);
+                }
+            });
+
+            const masterKey = await this.masterKeyPromise;
+            this.masterKeyPromise = null;
+            return masterKey;
+
+        } catch (error) {
+            this.masterKeyPromise = null;
+            console.error('[ApiKey] Error obteniendo master key:', error);
+            throw error;
+        }
+    }
+
     async decryptKey(provider, encryptedKey) {
         try {
-            // Solicita desencriptación al backend via StorageService
-            const decryptedKey = await storageService.getValue(`${provider}ApiKey`);
+            console.debug(`[ApiKey] ${provider}: iniciando desencriptación...`);
+            
+            // 1. Inicializar encryption (obtendrá la master key automáticamente)
+            console.debug(`[ApiKey] ${provider}: inicializando encryption...`);
+            await encryption.initialize();
+            console.debug(`[ApiKey] ${provider}: encryption inicializado`);
+
+            // 2. Desencriptar la key
+            console.debug(`[ApiKey] ${provider}: desencriptando...`);
+            const decryptedKey = await encryption.decrypt(encryptedKey);
+            
+            if (!decryptedKey) {
+                throw new Error('Error en desencriptación');
+            }
+
+            console.debug(`[ApiKey] ${provider}: desencriptada correctamente`);
             return decryptedKey;
+
         } catch (error) {
             console.error(`[ApiKey] Error desencriptando ${provider}:`, error);
             return null;
