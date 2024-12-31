@@ -46,6 +46,7 @@ class EncryptionService {
     }
 
     async initialize() {
+        const startTime = performance.now();
         try {
             // Si ya está inicializado o se intentó inicializar, retornar
             if (this.initialized || this.initializationAttempted) {
@@ -68,7 +69,9 @@ class EncryptionService {
                     console.log('[Encryption] Inicializando servicio...');
                     
                     // Esperar a que el WebSocket esté disponible
+                    const wsStart = performance.now();
                     await this._waitForWebSocket();
+                    console.debug(`[Encryption] WebSocket listo (${Math.round(performance.now() - wsStart)}ms)`);
                     
                     // Obtener la master key del backend
                     let masterKey = null;
@@ -82,10 +85,12 @@ class EncryptionService {
                         }
 
                         console.log('[Encryption] Solicitando master key al servidor...');
+                        const requestStart = performance.now();
                         try {
                             const response = await websocketService.sendRequest('encryption.get_master_key', {
                                 installTimestamp
                             });
+                            console.debug(`[Encryption] Respuesta recibida (${Math.round(performance.now() - requestStart)}ms)`);
                             
                             if (response.status === 'success' && response.key) {
                                 console.log('[Encryption] Master key recibida del servidor');
@@ -111,6 +116,7 @@ class EncryptionService {
                     }
 
                     // Importar la master key
+                    const importStart = performance.now();
                     const keyBuffer = new Uint8Array(masterKey.match(/.{2}/g).map(byte => parseInt(byte, 16)));
                     this.masterKey = await crypto.subtle.importKey(
                         'raw',
@@ -119,9 +125,11 @@ class EncryptionService {
                         false,
                         ['deriveKey']
                     );
+                    console.debug(`[Encryption] Master key importada (${Math.round(performance.now() - importStart)}ms)`);
                     
                     this.initialized = true;
-                    console.log('[Encryption] Servicio inicializado correctamente');
+                    const totalTime = Math.round(performance.now() - startTime);
+                    console.log(`[Encryption] Servicio inicializado correctamente (${totalTime}ms)`);
 
                     // Si la inicialización fue exitosa y usamos la key temporal, limpiar localStorage
                     if (localStorage.getItem('masterKey')) {
@@ -146,23 +154,23 @@ class EncryptionService {
     }
 
     async _waitForWebSocket() {
-        if (window.socket?.connected) {
+        if (websocketService.isConnected()) {
             return;
         }
 
         return new Promise((resolve) => {
             const checkInterval = setInterval(() => {
-                if (window.socket?.connected) {
+                if (websocketService.isConnected()) {
                     clearInterval(checkInterval);
                     resolve();
                 }
-            }, 100);
+            }, 10);
 
-            // Timeout después de 5 segundos
+            // Timeout después de 1 segundo
             setTimeout(() => {
                 clearInterval(checkInterval);
                 resolve();
-            }, 5000);
+            }, 1000);
         });
     }
 
@@ -210,6 +218,7 @@ class EncryptionService {
     }
 
     async decrypt(encryptedData) {
+        const startTime = performance.now();
         try {
             const data = new Uint8Array(this.base64ToArrayBuffer(encryptedData));
             
@@ -217,15 +226,22 @@ class EncryptionService {
             const iv = data.slice(16, 28);
             const content = data.slice(28);
 
+            const deriveStart = performance.now();
             const key = await this.deriveKey(salt);
+            console.debug(`[Encryption] Key derivada (${Math.round(performance.now() - deriveStart)}ms)`);
 
+            const decryptStart = performance.now();
             const decryptedContent = await crypto.subtle.decrypt(
                 { name: 'AES-GCM', iv },
                 key,
                 content
             );
+            console.debug(`[Encryption] Contenido desencriptado (${Math.round(performance.now() - decryptStart)}ms)`);
 
-            return new TextDecoder().decode(decryptedContent);
+            const result = new TextDecoder().decode(decryptedContent);
+            const totalTime = Math.round(performance.now() - startTime);
+            console.debug(`[Encryption] Desencriptación completa (${totalTime}ms)`);
+            return result;
         } catch (error) {
             console.error('[Encryption] Error crítico en desencriptación:', error);
             return null;

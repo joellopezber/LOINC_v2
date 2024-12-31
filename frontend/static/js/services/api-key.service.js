@@ -74,23 +74,28 @@ class ApiKeyService {
     }
 
     async decryptKey(provider, encryptedKey) {
+        const startTime = performance.now();
         try {
             console.debug(`[ApiKey] ${provider}: iniciando desencriptación...`);
             
             // 1. Inicializar encryption (obtendrá la master key automáticamente)
             console.debug(`[ApiKey] ${provider}: inicializando encryption...`);
+            const initStart = performance.now();
             await encryption.initialize();
-            console.debug(`[ApiKey] ${provider}: encryption inicializado`);
+            console.debug(`[ApiKey] ${provider}: encryption inicializado (${Math.round(performance.now() - initStart)}ms)`);
 
             // 2. Desencriptar la key
             console.debug(`[ApiKey] ${provider}: desencriptando...`);
+            const decryptStart = performance.now();
             const decryptedKey = await encryption.decrypt(encryptedKey);
+            console.debug(`[ApiKey] ${provider}: desencriptación completada (${Math.round(performance.now() - decryptStart)}ms)`);
             
             if (!decryptedKey) {
                 throw new Error('Error en desencriptación');
             }
 
-            console.debug(`[ApiKey] ${provider}: desencriptada correctamente`);
+            const totalTime = Math.round(performance.now() - startTime);
+            console.debug(`[ApiKey] ${provider}: proceso completo (${totalTime}ms)`);
             return decryptedKey;
 
         } catch (error) {

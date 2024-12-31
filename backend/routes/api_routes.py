@@ -26,97 +26,27 @@ def get_search_service():
     return search_service
 
 def init_socket_routes(socketio, search_service=None):
-    """
-    Inicializa las rutas de WebSocket.
-    
-    Args:
-        socketio: Instancia de SocketIO
-        search_service: Instancia opcional de DatabaseSearchService
-    """
+    """Inicializa las rutas de WebSocket"""
     logger.info("🚀 Inicializando rutas de WebSocket")
 
+    # Registrar handlers básicos
     @socketio.on('connect')
     def handle_connect():
-        """Maneja nueva conexión WebSocket"""
         logger.info(f"📡 Nueva conexión: {request.sid}")
         emit('connect_response', {'status': 'connected', 'sid': request.sid})
 
     @socketio.on('disconnect')
     def handle_disconnect():
-        """Maneja desconexión WebSocket"""
         logger.info(f"👋 Desconexión: {request.sid}")
 
-    @socketio.on('openai.test_search')
-    def handle_openai_test(data):
-        """Maneja solicitudes de test de OpenAI"""
-        try:
-            from tests.test_openai import handle_test_search
-            logger.info(f"🤖 Test OpenAI recibido: {data}")
-            result = handle_test_search(data, socketio)
-            emit('openai.test_result', result)
-        except Exception as e:
-            logger.error(f"❌ Error en test OpenAI: {str(e)}")
-            emit('openai.test_result', {
-                'status': 'error',
-                'message': str(e)
-            })
-
-    @socketio.on('ontology.search')
-    def handle_ontology_search(data):
-        """Maneja solicitudes de búsqueda ontológica"""
-        try:
-            from tests.test_ontology import handle_ontology_search
-            logger.info(f"🔍 Búsqueda ontológica recibida: {data}")
-            result = handle_ontology_search(data, socketio)
-            emit('ontology.search_result', result)
-        except Exception as e:
-            logger.error(f"❌ Error en búsqueda ontológica: {str(e)}")
-            emit('ontology.search_result', {
-                'status': 'error',
-                'message': str(e)
-            })
-
-    @socketio.on('search')
-    def handle_search(data):
-        """
-        Maneja solicitudes de búsqueda.
-        
-        Args:
-            data: Diccionario con parámetros de búsqueda
-        """
-        try:
-            logger.info(f"🔍 Búsqueda recibida: {data}")
-            
-            if not data or 'query' not in data:
-                raise ValueError("Query no proporcionada")
-
-            query = data['query']
-            user_id = data.get('user_id', request.sid)
-            
-            # Obtener servicio de forma lazy
-            search_service = get_search_service()
-            
-            results = search_service.search_loinc(query, user_id)
-            
-            response = {
-                'status': 'success',
-                'timestamp': datetime.now().isoformat(),
-                'service': search_service.get_user_preference(user_id),
-                'results': results
-            }
-            
-            emit('search_result', response)
-            return response
-
-        except Exception as e:
-            logger.error(f"❌ Error en búsqueda: {str(e)}", exc_info=True)
-            error_response = {
-                'status': 'error',
-                'timestamp': datetime.now().isoformat(),
-                'message': str(e)
-            }
-            emit('error', error_response)
-            return error_response
+    # Registrar handlers de servicios
+    try:
+        from services.handlers.on_demand.openai_handlers import OpenAIHandlers
+        logger.info("🤖 Registrando handler de OpenAI")
+        OpenAIHandlers(socketio)  # Se auto-registra en el constructor
+        logger.info("✅ Handler de OpenAI registrado")
+    except Exception as e:
+        logger.error(f"❌ Error registrando handler de OpenAI: {str(e)}")
 
     logger.info("✅ Rutas de WebSocket inicializadas")
 

@@ -56,7 +56,10 @@ class StorageService(LazyLoadService):
         """Obtiene un valor del storage para un usuario específico"""
         logger.debug(f"📤 [Storage:{key}] Obteniendo valor para usuario {install_id}")
         user_storage = self._get_user_storage(install_id)
-        return user_storage.get(key)
+        value = user_storage.get(key)
+        logger.debug(f"📥 [Storage:{key}] Valor obtenido: {'[ENCRYPTED]' if key == 'openaiApiKey' else str(value)}")
+        logger.debug(f"🗄️ [Storage] Estado actual: {json.dumps(self.storage_data, indent=2)}")
+        return value
 
     def set_value(self, key: str, value: Any, install_id: str) -> bool:
         """Establece un valor en el storage para un usuario específico"""

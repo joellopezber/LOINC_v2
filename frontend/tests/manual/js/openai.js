@@ -2,12 +2,34 @@ export class OpenAITester {
     constructor() {
         this.socket = null;
         this.messages = [];
-        this.systemPrompt = null;
         this.isConnected = false;
         this.onConnectionChange = null;
         this.onMessageReceived = null;
         this.onTypingStart = null;
         this.onTypingEnd = null;
+
+        // Configuración por defecto
+        this.config = {
+            model: 'gpt-4o',
+            temperature: 0.7,
+            systemPrompt: 'Eres un asistente personalizado de chat que ayuda a los usuarios de manera amable y profesional.'
+        };
+    }
+
+    // Métodos para configurar parámetros
+    setModel(model) {
+        this.config.model = model;
+        console.log('🤖 Modelo configurado:', model);
+    }
+
+    setTemperature(temperature) {
+        this.config.temperature = temperature;
+        console.log('🌡️ Temperatura configurada:', temperature);
+    }
+
+    setSystemPrompt(prompt) {
+        this.config.systemPrompt = prompt;
+        console.log('📝 System prompt configurado:', prompt);
     }
 
     async connect() {
@@ -53,6 +75,7 @@ export class OpenAITester {
                 this.onMessageReceived?.(response.response, false);
             } else {
                 console.error('❌ Error:', response.message || 'Error desconocido');
+                this.onMessageReceived?.(response.message || 'Error desconocido', true);
             }
         });
     }
@@ -71,14 +94,28 @@ export class OpenAITester {
             content: message
         });
 
-        // Preparar payload
+        // Obtener install_id
+        const install_id = localStorage.getItem('installTimestamp');
+        if (!install_id) {
+            throw new Error('No se encontró install_id');
+        }
+
+        // Preparar payload con todos los parámetros
         const payload = {
             text: message,
             messages: this.messages,
-            systemPrompt: this.systemPrompt
+            install_id: install_id,
+            model: this.config.model,
+            temperature: this.config.temperature,
+            systemPrompt: this.config.systemPrompt
         };
 
-        // Enviar mensaje sin esperar callback
+        console.log('📤 Enviando payload:', {
+            ...payload,
+            messages: `${payload.messages.length} mensajes`
+        });
+
+        // Enviar mensaje
         this.socket.emit('openai.test_search', payload);
     }
 

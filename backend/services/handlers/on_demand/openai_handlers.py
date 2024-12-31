@@ -4,36 +4,62 @@ from ...on_demand.openai_service import openai_service
 logger = logging.getLogger(__name__)
 
 class OpenAIHandlers:
-    @staticmethod
-    def register(socketio):
-        @socketio.on('openai.test_search')
-        def handle_test_search(data):
-            """Maneja la solicitud de prueba de búsqueda con OpenAI"""
+    """Handler para procesar mensajes con OpenAI"""
+    
+    def __init__(self, socketio):
+        self.socketio = socketio
+        self._register_handlers()
+    
+    def _register_handlers(self):
+        """Registra los handlers de eventos"""
+        @self.socketio.on('openai.test_search')
+        def handle_chat_message(data):
+            logger.info("\n🔍 Procesando mensaje con OpenAI...")
+            logger.info(f"📥 Datos recibidos: {data}")
+            
             try:
-                logger.info("\n🔍 Iniciando prueba OpenAI...")
-                
                 # Validar datos
                 if not isinstance(data, dict):
                     raise ValueError("Datos recibidos no son un diccionario válido")
 
-                # Procesar la consulta
+                # Validar install_id
+                install_id = data.get('install_id')
+                if not install_id:
+                    raise ValueError("Se requiere install_id")
+
+                logger.info(f"🔑 Install ID: {install_id}")
+                logger.info(f"💬 Mensaje: {data.get('text')}")
+
+                # Procesar con OpenAI
                 response = openai_service.process_query(
-                    text=data.get('text'),
-                    messages=data.get('messages', []),
-                    system_prompt=data.get('systemPrompt', '')
+                    user_prompt=data.get('text'),
+                    install_id=install_id,
+                    chat_history=data.get('messages', [])[:-1],
+                    model=data.get('model', 'gpt-4o'),
+                    temperature=data.get('temperature', 0.7),
+                    system_prompt=data.get('systemPrompt')
                 )
 
+                if not response:
+                    raise ValueError("No se obtuvo respuesta de OpenAI")
+
+                logger.info("✅ Respuesta obtenida de OpenAI")
+                logger.info(f"📤 Enviando respuesta: {response[:100]}...")
+
                 # Enviar respuesta
-                socketio.emit('openai.test_result', {
+                self.socketio.emit('openai.test_result', {
                     'status': 'success',
                     'query': data.get('text', ''),
                     'response': response
                 })
+                
+                logger.info("✅ Respuesta enviada al cliente")
 
             except Exception as e:
-                error_msg = f"❌ Error en OpenAI handler: {str(e)}"
+                error_msg = f"❌ Error al procesar con OpenAI: {str(e)}"
                 logger.error(error_msg)
-                socketio.emit('openai.test_result', {
+                self.socketio.emit('openai.test_result', {
                     'status': 'error',
                     'message': error_msg
-                }) 
+                })
+                logger.error("❌ Error enviado al cliente") 

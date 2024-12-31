@@ -130,6 +130,7 @@ class StorageSync {
         this.logger = logger;
         this.queue = [];
         this.syncing = false;
+        this.pendingSync = new Set();  // Nuevo: Set para trackear datos pendientes
     }
 
     async syncWithServer(data, options = {}) {
@@ -144,12 +145,20 @@ class StorageSync {
             // Enviar datos al servidor
             const installId = localStorage.getItem('installTimestamp');
             for (const [key, value] of Object.entries(data)) {
-                await websocketService.sendRequest('storage.set_value', {
-                    key,
-                    value,
-                    install_id: installId,
-                    force: options.force
-                });
+                try {
+                    await websocketService.sendRequest('storage.set_value', {
+                        key,
+                        value,
+                        install_id: installId,
+                        force: options.force
+                    });
+                    // Si se sincronizó correctamente, remover de pendientes
+                    this.pendingSync.delete(key);
+                } catch (error) {
+                    // Si falla la sincronización, marcar como pendiente
+                    this.pendingSync.add(key);
+                    this.logger.warn(`Error sincronizando ${key}, se reintentará más tarde:`, error);
+                }
             }
 
             // Procesar cola pendiente
@@ -160,11 +169,21 @@ class StorageSync {
 
             return true;
         } catch (error) {
-            this.logger.error('Error sincronizando:', error);
+            this.logger.error('Error general sincronizando:', error);
+            // Marcar todos los datos como pendientes
+            Object.keys(data).forEach(key => this.pendingSync.add(key));
             return false;
         } finally {
             this.syncing = false;
         }
+    }
+
+    hasPendingSync() {
+        return this.pendingSync.size > 0;
+    }
+
+    getPendingKeys() {
+        return Array.from(this.pendingSync);
     }
 }
 
@@ -296,6 +315,21 @@ class StorageService {
 
     async _handleWebSocketReconnect() {
         if (!this.initialized) return;
+
+        // Primero sincronizar datos pendientes
+        if (this.sync.hasPendingSync()) {
+            this.logger.info('Reintentando sincronizar datos pendientes...');
+            const pendingData = {};
+            for (const key of this.sync.getPendingKeys()) {
+                const value = await this.get(key);
+                if (value !== null) {
+                    pendingData[key] = value;
+                }
+            }
+            await this.sync.syncWithServer(pendingData, { force: true });
+        }
+
+        // Luego sincronizar todos los datos como respaldo
         const localData = await this._getLocalData();
         await this.sync.syncWithServer(localData, { force: true });
     }

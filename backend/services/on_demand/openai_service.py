@@ -48,33 +48,42 @@ class OpenAIService(LazyLoadService):
         """Obtiene el StorageService de forma lazy"""
         return self._storage
 
-    def _get_credentials(self):
+    def _get_credentials(self, install_id):
         """Obtiene y desencripta las credenciales desde storage"""
         try:
+            logger.info(f"\n{'='*50}")
+            logger.info(f"🔑 Obteniendo credenciales para install_id: {install_id}")
+            
             if not self.storage:
                 logger.error("❌ No se pudo obtener StorageService")
                 return None
 
             # Obtener credenciales encriptadas
-            encrypted_key = self.storage.get_value('openaiApiKey')
-            install_timestamp = self.storage.get_value('installTimestamp')
+            logger.info("📤 Solicitando API key del storage...")
+            encrypted_key = self.storage.get_value('openaiApiKey', install_id)
+            logger.info(f"📥 API key encriptada: {'[ENCONTRADA]' if encrypted_key else '[NO ENCONTRADA]'}")
 
-            if not encrypted_key or not install_timestamp:
-                logger.error("❌ Credenciales no encontradas en storage")
+            if not encrypted_key:
+                logger.error("❌ API key no encontrada - Necesita configuración")
                 return None
 
-            # Desencriptar API key usando el servicio de encriptación
+            # Obtener servicio de encriptación
             encryption_service = service_locator.get('encryption')
             if not encryption_service:
                 logger.error("❌ No se pudo obtener encryption service")
                 return None
 
-            api_key = encryption_service.decrypt(encrypted_key, install_timestamp)
+            # Desencriptar API key
+            logger.info("🔓 Desencriptando API key...")
+            api_key = encryption_service.decrypt(encrypted_key, install_id)
+            logger.info(f"🔐 API key desencriptada: {'[OK]' if api_key else '[ERROR]'}")
+
             if not api_key:
                 logger.error("❌ Error desencriptando API key")
                 return None
 
-            logger.info("✅ Credenciales obtenidas correctamente")
+            logger.info("✅ API key obtenida y desencriptada correctamente")
+            logger.info(f"{'='*50}\n")
             return api_key
 
         except Exception as e:
@@ -102,28 +111,21 @@ class OpenAIService(LazyLoadService):
     def process_query(
         self, 
         user_prompt: str,
+        install_id: str,
         chat_history: List[Dict[str, str]] = None,
         model: str = DEFAULT_MODEL,
         temperature: float = DEFAULT_TEMPERATURE,
         system_prompt: str = DEFAULT_SYSTEM_PROMPT
     ) -> Optional[str]:
-        """
-        Procesa una consulta usando OpenAI
-        Args:
-            user_prompt: Texto de la consulta (obligatorio)
-            chat_history: Historial de conversación (opcional)
-            model: Modelo a usar (default: gpt-4o)
-            temperature: Temperatura para la respuesta (default: 0.7)
-            system_prompt: Prompt de sistema (default: prompt básico)
-        Returns:
-            Respuesta de OpenAI o None si hay error
-        """
+        """Procesa una consulta usando OpenAI"""
         if not user_prompt:
-            logger.error("❌ Se requiere user_prompt")
-            return None
+            return "Se requiere un mensaje para procesar"
+
+        if not install_id:
+            return "Se requiere ID de instalación"
 
         try:
-            # Log de parámetros usados
+            # Log de parámetros
             logger.info(f"🔄 Procesando consulta:")
             logger.info(f"📝 Prompt: {user_prompt[:50]}...")
             logger.info(f"🤖 Modelo: {model}")
@@ -131,10 +133,9 @@ class OpenAIService(LazyLoadService):
             
             # Inicializar cliente si es necesario
             if not self.client:
-                api_key = self._get_credentials()
+                api_key = self._get_credentials(install_id)
                 if not api_key:
-                    logger.error("❌ No se pudieron obtener credenciales")
-                    return None
+                    return "Por favor, configura tu API key de OpenAI en el panel de configuración antes de continuar"
                 self.client = OpenAI(api_key=api_key)
                 logger.info("✅ Cliente OpenAI inicializado")
             
