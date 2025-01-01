@@ -32,6 +32,9 @@
         <div id="results" class="results"></div>
     </div>
 
+    <!-- Socket.IO -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.min.js"></script>
+
     <script type="module">
         import { storageTest, displayResult, displayError } from '../js/infoback.js';
 
@@ -58,7 +61,7 @@
                 const data = await storageTest.getAllData();
                 displayResult('results', data);
             } catch (error) {
-                console.error('Error leyendo datos:', error);
+                console.error('❌ Error:', error);
                 displayError('results', error);
             } finally {
                 readButton.disabled = false;
@@ -70,9 +73,9 @@
             try {
                 syncButton.disabled = true;
                 await storageTest.syncWithBackend();
-                await handleRead(); // Actualizar vista después de sincronizar
+                await handleRead();
             } catch (error) {
-                console.error('Error sincronizando:', error);
+                console.error('❌ Error:', error);
                 displayError('results', error);
             } finally {
                 syncButton.disabled = false;
@@ -86,9 +89,9 @@
             try {
                 clearButton.disabled = true;
                 await storageTest.clearBackendMemory();
-                await handleRead(); // Actualizar vista después de limpiar
+                await handleRead();
             } catch (error) {
-                console.error('Error limpiando memoria:', error);
+                console.error('❌ Error:', error);
                 displayError('results', error);
             } finally {
                 clearButton.disabled = false;
@@ -102,10 +105,8 @@
 
         // Inicializar al cargar
         document.addEventListener('DOMContentLoaded', () => {
-            console.log('🚀 Iniciando aplicación...');
             const installTime = localStorage.getItem('installTimestamp') || 'No disponible';
             document.getElementById('installTimeDisplay').textContent = installTime;
-            console.log('⏰ Installation Time:', installTime);
             storageTest.connect();
         });
     </script>

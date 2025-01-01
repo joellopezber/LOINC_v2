@@ -1,64 +1,22 @@
-export class OntologyTester {
+import { BaseTester } from './base.js';
+
+export class OntologyTester extends BaseTester {
     constructor() {
+        super();
         console.log('🔄 Inicializando OntologyTester');
-        this.socket = null;
-        this.isConnected = false;
-        this.service = null;  // Se inicializará después de la conexión
+        this.service = null;
         this.unsubscribe = null;
-        this.onConnectionChange = null;
         this.onSearchResult = null;
-        this.onError = null;
-    }
-
-    async connect() {
-        try {
-            if (this.socket?.connected) {
-                console.log('🔌 Ya conectado al servidor');
-                return;
-            }
-
-            console.log('🔌 Conectando al servidor...');
-            this.socket = io('http://localhost:5001', {
-                transports: ['websocket']
-            });
-
-            // Asignar socket a window para que otros servicios lo usen
-            window.socket = this.socket;
-
-            this.socket.on('connect', () => {
-                console.log('✅ Conectado al servidor');
-                this.isConnected = true;
-                this.onConnectionChange?.(true);
-                this.initialize();  // Inicializar service después de conectar
-            });
-
-            this.socket.on('disconnect', () => {
-                console.log('❌ Desconectado del servidor');
-                this.isConnected = false;
-                this.onConnectionChange?.(false);
-            });
-
-            this.socket.on('connect_error', (error) => {
-                console.error('❌ Error de conexión:', error);
-                this.isConnected = false;
-                this.onConnectionChange?.(false);
-            });
-
-        } catch (error) {
-            console.error('❌ Error estableciendo conexión:', error);
-            this.onError?.(error);
-        }
+        this.testResults = new Map();
     }
 
     async initialize() {
         try {
             console.log('🔄 Iniciando inicialización del tester');
             
-            // Importar dinámicamente el servicio con la ruta correcta
             const { ontologyService } = await import('/static/js/services/ontology.service.js');
             this.service = ontologyService;
 
-            // Suscribirse a actualizaciones
             this.unsubscribe = this.service.addListener((response) => {
                 console.log('📩 Tester recibió respuesta:', response);
                 
@@ -69,6 +27,12 @@ export class OntologyTester {
                     console.error('❌ Error en respuesta:', response.message);
                     this.onError?.(new Error(response.message));
                 }
+            });
+
+            // Escuchar resultados de test
+            this._ws.on('ontology.test_result', (response) => {
+                console.log('📩 Resultado de test recibido:', response);
+                this.handleTestResult(response);
             });
 
             console.log('✅ Tester inicializado correctamente');
@@ -93,16 +57,81 @@ export class OntologyTester {
         }
     }
 
+    async runTest(testCase) {
+        try {
+            if (!this.isConnected) {
+                throw new Error('No hay conexión con el servidor');
+            }
+
+            const testId = `test_${Date.now()}`;
+            console.log(`🧪 Iniciando test ${testId}:`, testCase);
+
+            // Guardar información del test
+            this.testResults.set(testId, {
+                status: 'running',
+                startTime: Date.now(),
+                testCase
+            });
+
+            // Enviar test al servidor
+            await this._ws.sendRequest('ontology.test', {
+                test_id: testId,
+                ...testCase
+            });
+
+            return testId;
+
+        } catch (error) {
+            console.error('❌ Error ejecutando test:', error);
+            this.onError?.(error);
+        }
+    }
+
+    handleTestResult(response) {
+        const { test_id, status, result, error } = response;
+        
+        if (!this.testResults.has(test_id)) {
+            console.warn('⚠️ Resultado recibido para test desconocido:', test_id);
+            return;
+        }
+
+        const testInfo = this.testResults.get(test_id);
+        testInfo.endTime = Date.now();
+        testInfo.duration = testInfo.endTime - testInfo.startTime;
+
+        if (status === 'success') {
+            testInfo.status = 'passed';
+            testInfo.result = result;
+            console.log(`✅ Test ${test_id} completado en ${testInfo.duration}ms:`, result);
+        } else {
+            testInfo.status = 'failed';
+            testInfo.error = error;
+            console.error(`❌ Test ${test_id} falló en ${testInfo.duration}ms:`, error);
+        }
+
+        // Notificar resultado
+        this.onTestComplete?.(test_id, testInfo);
+    }
+
+    getTestResults() {
+        return Array.from(this.testResults.entries()).map(([id, info]) => ({
+            id,
+            ...info
+        }));
+    }
+
+    clearTestResults() {
+        this.testResults.clear();
+    }
+
     disconnect() {
         console.log('🧹 Tester: Limpiando recursos');
         if (this.unsubscribe) {
             this.unsubscribe();
             this.unsubscribe = null;
         }
-        if (this.socket) {
-            this.socket.disconnect();
-            this.socket = null;
-        }
         this.service = null;
+        this.testResults.clear();
+        super.disconnect();
     }
 } 

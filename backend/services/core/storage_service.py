@@ -194,45 +194,49 @@ class StorageService(LazyLoadService):
             logger.error(f"❌ Error obteniendo credenciales: {e}")
             return None
 
-    def process_openai_test(self) -> Optional[Dict[str, Any]]:
+    def process_openai_test(self, install_id: str) -> Optional[Dict[str, Any]]:
         """Procesa un test de OpenAI usando los datos almacenados"""
         try:
             # 1. Obtener datos del test
-            test_data = self.get_value('openai_test_data')
+            test_data = self.get_value('openai_test_data', install_id)
             if not test_data:
-                logger.error("❌ No hay datos para el test OpenAI")
+                logger.error("❌ No hay datos para el test")
                 return None
 
             # 2. Validar datos necesarios
             text = test_data.get('text')
             if not text:
-                logger.error("❌ No se proporcionó texto para la consulta")
+                logger.error("❌ No se proporcionó texto")
                 return None
 
-            # 3. Obtener OpenAI service de forma lazy
+            # 3. Obtener OpenAI service
             from .openai_service import openai_service
             if not openai_service:
-                logger.error("❌ No se pudo obtener OpenAI service")
+                logger.error("❌ OpenAI service no disponible")
                 return None
 
             # 4. Inicializar si es necesario
             if not openai_service.initialized:
-                logger.info("🔄 Inicializando OpenAI service...")
                 if not openai_service.initialize():
-                    logger.error("❌ Error inicializando OpenAI service")
+                    logger.error("❌ Error inicializando OpenAI")
                     return None
-                logger.info("✅ OpenAI service inicializado")
 
-            # 5. Procesar consulta
-            logger.info("🔄 Procesando consulta OpenAI...")
+            # 5. Procesar consulta usando las credenciales del usuario
+            api_key = self.get_credentials(install_id)
+            if not api_key:
+                logger.error("❌ Credenciales no válidas")
+                return None
+
+            logger.info("🔄 Procesando consulta")
             response = openai_service.process_query(
                 user_prompt=text,
                 chat_history=test_data.get('messages', []),
-                system_prompt=test_data.get('systemPrompt', '')
+                system_prompt=test_data.get('systemPrompt', ''),
+                api_key=api_key
             )
 
             if not response:
-                logger.error("❌ No se obtuvo respuesta de OpenAI")
+                logger.error("❌ Sin respuesta de OpenAI")
                 return None
 
             # 6. Preparar respuesta
@@ -244,7 +248,7 @@ class StorageService(LazyLoadService):
             return result
 
         except Exception as e:
-            logger.error(f"❌ Error procesando test OpenAI: {e}")
+            logger.error(f"❌ Error en test: {e}")
             return None
 
     def _has_value_changed(self, key: str, value: Any, install_id: str) -> bool:

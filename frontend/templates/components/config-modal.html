@@ -517,22 +517,22 @@
                         <h3>Rendimiento</h3>
                         <small class="info-text">Configura aspectos de rendimiento del sistema</small>
                     </div>
-                    <div class="input-group">
-                        <label>
-                            <span>Caché máximo</span>
-                            <div class="input-number-container">
-                                <input type="number" name="maxCacheSize" min="10" max="1000" value="100">
-                                <span class="unit">MB</span>
+                    <div class="radio-group">
+                        <label class="checkbox-option">
+                            <input type="number" name="maxCacheSize" min="10" max="1000" value="100">
+                            <div class="checkbox-content">
+                                <div class="checkbox-title">Caché máximo</div>
+                                <div class="checkbox-description">Tamaño máximo de la caché en memoria</div>
                             </div>
-                            <small class="info-text">Tamaño máximo de la caché en memoria</small>
+                            <div class="unit">MB</div>
                         </label>
-                        <label>
-                            <span>Tiempo de caché</span>
-                            <div class="input-number-container">
-                                <input type="number" name="cacheExpiry" min="1" max="72" value="24">
-                                <span class="unit">horas</span>
+                        <label class="checkbox-option">
+                            <input type="number" name="cacheExpiry" min="1" max="72" value="24">
+                            <div class="checkbox-content">
+                                <div class="checkbox-title">Tiempo de caché</div>
+                                <div class="checkbox-description">Tiempo de expiración de la caché</div>
                             </div>
-                            <small class="info-text">Tiempo de expiración de la caché</small>
+                            <div class="unit">horas</div>
                         </label>
                     </div>
                 </div>

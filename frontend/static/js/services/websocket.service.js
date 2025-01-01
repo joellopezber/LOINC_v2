@@ -93,6 +93,16 @@ class WebSocketService {
             this.connecting = true;
             console.debug('🔌 Creando nueva conexión WebSocket');
             
+            // Usar socket existente si está disponible
+            if (window.socket?.connected) {
+                console.debug('🔌 Usando socket existente de window.socket');
+                this.socket = window.socket;
+                this.connected = true;
+                this._setupEventHandlers();
+                this._emit('connected');
+                return this.socket;
+            }
+            
             this.socket = io({
                 transports: ['websocket'],
                 reconnection: true,
@@ -114,24 +124,12 @@ class WebSocketService {
                     console.error('🔌 Error de conexión WebSocket:', error);
                     reject(error);
                 });
-
-                this.socket.on('disconnect', () => {
-                    this.connected = false;
-                    console.warn('🔌 Desconectado del servidor WebSocket');
-                    this._emit('disconnected');
-                });
-
-                this.socket.on('reconnect', () => {
-                    this.connected = true;
-                    console.info('🔌 Reconectado al servidor WebSocket');
-                    this._setupEventHandlers();
-                    this._emit('reconnected');
-                });
             });
 
             return this.socket;
         } catch (error) {
-            console.error('🔌 Error estableciendo conexión WebSocket:', error);
+            this.connecting = false;
+            console.error('❌ Error estableciendo conexión WebSocket:', error);
             throw error;
         } finally {
             this.connecting = false;
@@ -167,6 +165,23 @@ class WebSocketService {
         // Manejar respuestas del servidor
         this.socket.on('storage.value_set', (response) => {
             console.debug('📥 Recibido storage.value_set:', response);
+            const { request_id, status, error } = response;
+            const request = this.pendingRequests.get(request_id);
+            
+            if (request) {
+                clearTimeout(request.timeout);
+                if (status === 'success') {
+                    request.resolve(response);
+                } else {
+                    request.reject(new Error(error || 'Error desconocido'));
+                }
+                this.pendingRequests.delete(request_id);
+            }
+        });
+
+        // Manejar respuesta de get_all_for_user
+        this.socket.on('storage.all_data', (response) => {
+            console.debug('📥 Recibido storage.all_data:', response);
             const { request_id, status, error } = response;
             const request = this.pendingRequests.get(request_id);
             
@@ -235,19 +250,50 @@ class WebSocketService {
      * Envía una petición al servidor
      */
     async sendRequest(event, data) {
+        // Si hay un socket en window, usarlo
+        if (window.socket?.connected && !this.socket) {
+            console.debug('🔌 Usando socket existente de window.socket');
+            this.socket = window.socket;
+            this.connected = true;
+            this._setupEventHandlers();
+        }
+
         if (!this.connected) {
+            console.error('❌ WebSocket no conectado');
             throw new Error('WebSocket no conectado');
         }
 
         const requestId = `req_${this.requestId++}`;
         const install_id = localStorage.getItem('installTimestamp');
 
+        console.debug(`🔄 Preparando request ${requestId} para evento ${event}`);
+        console.debug('📤 Datos a enviar:', { ...data, install_id, request_id: requestId });
+
         return new Promise((resolve, reject) => {
             const timeout = setTimeout(() => {
                 console.warn(`⏰ Timeout para evento ${event} (request_id: ${requestId})`);
                 this.pendingRequests.delete(requestId);
                 reject(new Error('Timeout esperando respuesta'));
-            }, 5000);
+            }, event.startsWith('ontology.') ? 30000 : 5000);
+
+            // Registrar handlers para la respuesta
+            this.socket.once(event + '_result', (response) => {
+                console.debug(`📩 Respuesta recibida para ${event} (request_id: ${requestId}):`, response);
+                
+                if (response.request_id === requestId) {
+                    console.debug('✅ Request ID coincide, procesando respuesta');
+                    clearTimeout(timeout);
+                    this.pendingRequests.delete(requestId);
+                    
+                    if (response.status === 'success') {
+                        resolve(response);
+                    } else {
+                        reject(new Error(response.message || 'Error desconocido'));
+                    }
+                } else {
+                    console.warn('⚠️ Request ID no coincide, ignorando respuesta');
+                }
+            });
 
             console.debug(`📤 Enviando ${event} (request_id: ${requestId})`, data);
             this.pendingRequests.set(requestId, { resolve, reject, timeout });
@@ -256,7 +302,7 @@ class WebSocketService {
             this.socket.emit(event, { 
                 ...data, 
                 request_id: requestId,
-                install_id: install_id  // ✅ Nombre correcto del parámetro
+                install_id: install_id
             });
         });
     }

@@ -1,3 +1,5 @@
+import { websocketService } from '/static/js/services/websocket.service.js';
+
 /**
  * Clase base para todos los testers
  * Maneja la conexión WebSocket y funcionalidad común
@@ -5,49 +7,54 @@
 export class BaseTester {
     constructor() {
         console.log('🔄 Inicializando BaseTester');
-        this.socket = null;
         this.isConnected = false;
         this.onConnectionChange = null;
         this.onError = null;
+        // Exponer websocketService para las clases hijas
+        this._ws = websocketService;
     }
 
     async connect() {
         try {
-            if (this.socket?.connected) {
+            if (websocketService.isConnected()) {
                 console.log('🔌 Ya conectado al servidor');
+                this.isConnected = true;
+                this.onConnectionChange?.(true);
+                // Solo llamar a initialize si está implementado
+                if (this.initialize !== BaseTester.prototype.initialize) {
+                    await this.initialize();
+                }
                 return;
             }
 
             console.log('🔌 Conectando al servidor...');
-            this.socket = io('http://localhost:5001', {
-                transports: ['websocket']
-            });
 
-            // Asignar socket a window para que otros servicios lo usen
-            window.socket = this.socket;
-
-            this.socket.on('connect', () => {
+            // Configurar handlers de conexión
+            websocketService.on('connected', async () => {
                 console.log('✅ Conectado al servidor');
                 this.isConnected = true;
                 this.onConnectionChange?.(true);
                 // Solo llamar a initialize si está implementado
                 if (this.initialize !== BaseTester.prototype.initialize) {
-                    this.initialize();
+                    await this.initialize();
                 }
             });
 
-            this.socket.on('disconnect', () => {
+            websocketService.on('disconnected', () => {
                 console.log('❌ Desconectado del servidor');
                 this.isConnected = false;
                 this.onConnectionChange?.(false);
             });
 
-            this.socket.on('connect_error', (error) => {
+            websocketService.on('error', (error) => {
                 console.error('❌ Error de conexión:', error);
                 this.isConnected = false;
                 this.onConnectionChange?.(false);
                 this.onError?.(error);
             });
+
+            // Conectar usando websocketService
+            await websocketService.connect();
 
         } catch (error) {
             console.error('❌ Error estableciendo conexión:', error);
@@ -63,11 +70,8 @@ export class BaseTester {
 
     disconnect() {
         console.log('🧹 BaseTester: Limpiando recursos');
-        if (this.socket) {
-            this.socket.disconnect();
-            this.socket = null;
-        }
         this.isConnected = false;
+        // No desconectamos websocketService ya que puede estar siendo usado por otros servicios
     }
 
     // Método helper para logs

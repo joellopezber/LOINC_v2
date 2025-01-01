@@ -188,6 +188,52 @@ export class ConfigModal {
             });
         }
 
+        // Eliminar ontología
+        const deleteOntologyButton = document.getElementById('deleteOntology');
+        if (deleteOntologyButton) {
+            deleteOntologyButton.addEventListener('click', async () => {
+                if (confirm('¿Estás seguro de que quieres eliminar todos los datos de ontología? Esta acción no se puede deshacer.')) {
+                    try {
+                        deleteOntologyButton.disabled = true;
+                        deleteOntologyButton.innerHTML = '<span class="material-icons rotating">sync</span> Eliminando...';
+                        
+                        // Obtener configuración actual
+                        const currentConfig = await this.configStorage.loadConfig();
+                        console.log('[ConfigModal] Configuración actual cargada:', currentConfig);
+                        
+                        // Actualizar solo ontologyResults
+                        currentConfig.ontologyResults = {
+                            default: {
+                                data: {},
+                                timestamp: Date.now(),
+                                searchCount: 0
+                            }
+                        };
+                        console.log('[ConfigModal] Limpiando datos de ontología...');
+
+                        // Limpiar localStorage
+                        console.log('[ConfigModal] Eliminando ontologyResults del localStorage');
+                        localStorage.removeItem('ontologyResults');
+                        
+                        const result = await this.configStorage.saveConfig(currentConfig);
+                        console.log('[ConfigModal] Resultado de la operación:', result);
+
+                        if (result.success) {
+                            notifications.success('Datos de ontología eliminados correctamente');
+                        } else {
+                            notifications.error('Error al eliminar los datos de ontología');
+                        }
+                    } catch (error) {
+                        notifications.error('Error al eliminar los datos de ontología');
+                        console.error('Error:', error);
+                    } finally {
+                        deleteOntologyButton.disabled = false;
+                        deleteOntologyButton.innerHTML = '<span class="material-icons">delete_forever</span> Eliminar Ontología';
+                    }
+                }
+            });
+        }
+
         // Click fuera del modal
         this.modal.addEventListener('click', (e) => {
             if (e.target === this.modal) {

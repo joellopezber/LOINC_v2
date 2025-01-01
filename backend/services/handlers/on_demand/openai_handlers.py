@@ -14,8 +14,7 @@ class OpenAIHandlers:
         """Registra los handlers de eventos"""
         @self.socketio.on('openai.test_search')
         def handle_chat_message(data):
-            logger.info("\n🔍 Procesando mensaje con OpenAI...")
-            logger.info(f"📥 Datos recibidos: {data}")
+            logger.info("🔄 Procesando mensaje OpenAI")
             
             try:
                 # Validar datos
@@ -26,9 +25,6 @@ class OpenAIHandlers:
                 install_id = data.get('install_id')
                 if not install_id:
                     raise ValueError("Se requiere install_id")
-
-                logger.info(f"🔑 Install ID: {install_id}")
-                logger.info(f"💬 Mensaje: {data.get('text')}")
 
                 # Procesar con OpenAI
                 response = openai_service.process_query(
@@ -43,8 +39,7 @@ class OpenAIHandlers:
                 if not response:
                     raise ValueError("No se obtuvo respuesta de OpenAI")
 
-                logger.info("✅ Respuesta obtenida de OpenAI")
-                logger.info(f"📤 Enviando respuesta: {response[:100]}...")
+                logger.info("✅ Respuesta obtenida")
 
                 # Enviar respuesta
                 self.socketio.emit('openai.test_result', {
@@ -53,13 +48,10 @@ class OpenAIHandlers:
                     'response': response
                 })
                 
-                logger.info("✅ Respuesta enviada al cliente")
-
             except Exception as e:
-                error_msg = f"❌ Error al procesar con OpenAI: {str(e)}"
+                error_msg = f"❌ Error: {str(e)}"
                 logger.error(error_msg)
                 self.socketio.emit('openai.test_result', {
                     'status': 'error',
                     'message': error_msg
-                })
-                logger.error("❌ Error enviado al cliente") 
+                }) 

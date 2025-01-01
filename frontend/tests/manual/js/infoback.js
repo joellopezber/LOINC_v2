@@ -12,39 +12,23 @@ class StorageTest extends BaseTester {
 
     _disableAutoSync() {
         storageService.pendingSync = false;
-        storageService.wsConfigured = false;
+        storageService.wsConfigured = true;
         storageService.autoSync = false;
         storageService.syncQueue = [];
     }
 
     _saveOriginalFunctions() {
-        this.originalSetupWS = storageService._setupWebSocket;
         this.originalQueueSync = storageService.queueSync;
-        this.originalInitialize = storageService.initialize;
-        this.originalProcessQueue = storageService.processQueue;
     }
 
     _overrideFunctions() {
-        storageService._setupWebSocket = () => {
-            console.log('🚫 Configuración WebSocket deshabilitada');
-        };
-
+        storageService._setupWebSocket = () => {};
         storageService.queueSync = async (options = {}) => {
-            console.log('🔍 Intento de queueSync con opciones:', options);
-            if (!options.force) {
-                console.log('🚫 Sincronización automática bloqueada');
-                return Promise.resolve(false);
-            }
+            if (!options.force) return Promise.resolve(false);
             return this.originalQueueSync.call(storageService, options);
         };
-
-        storageService.processQueue = () => {
-            console.log('🚫 Procesamiento de cola bloqueado');
-            return Promise.resolve(false);
-        };
-
+        storageService.processQueue = () => Promise.resolve(false);
         storageService.initialize = async () => {
-            console.log('🔄 Inicializando storage sin WebSocket...');
             storageService.initialized = true;
             storageService.initializing = false;
             return Promise.resolve(true);
@@ -53,129 +37,169 @@ class StorageTest extends BaseTester {
 
     async initialize() {
         try {
-            await this._waitForWebSocket();
             if (!this.initialized) {
                 await storageService.initialize();
                 this.initialized = true;
-                console.log('✅ Storage Service initialized (sin sincronización automática)');
+                console.log('✅ Storage Service inicializado');
             }
         } catch (error) {
-            console.error('❌ Error initializing storage:', error);
+            console.error('❌ Error:', error);
             throw error;
-        }
-    }
-
-    async _waitForWebSocket() {
-        if (!this.socket?.connected) {
-            console.log('⏳ Esperando conexión WebSocket...');
-            await new Promise((resolve, reject) => {
-                const timeout = setTimeout(() => {
-                    reject(new Error('Timeout esperando WebSocket'));
-                }, 5000);
-                this.onConnectionChange = (connected) => {
-                    if (connected) {
-                        clearTimeout(timeout);
-                        resolve();
-                    }
-                };
-            });
         }
     }
 
     async syncWithBackend() {
         try {
-            console.log('🔄 Iniciando sincronización manual con backend...');
-            const socket = window.socket;
-            if (!socket?.connected) {
-                throw new Error('No hay conexión WebSocket disponible');
+            console.log('🔄 Sincronizando con backend');
+            if (!this._ws.isConnected()) {
+                throw new Error('No hay conexión WebSocket');
             }
 
-            const data = await this._collectData();
-            await this._sendData(socket, data);
-            console.log('✅ Sincronización manual completada');
+            // Obtener datos críticos para sincronización
+            const syncData = await this._collectData();
+            
+            // Enviar cada dato al backend
+            for (const [key, value] of Object.entries(syncData)) {
+                if (value !== null) {
+                    // No sincronizar installTimestamp, es un valor especial
+                    if (key !== 'installTimestamp') {
+                        await this._ws.sendRequest('storage.set_value', {
+                            key,
+                            value,
+                            install_id: localStorage.getItem('installTimestamp')
+                        });
+                    }
+                }
+            }
+
+            console.log('✅ Sincronización completada');
         } catch (error) {
-            console.error('❌ Error en sincronización:', error);
+            console.error('❌ Error:', error);
             throw error;
         }
     }
 
     async _collectData() {
-        const config = await storageService.get('searchConfig');
-        const apiKey = localStorage.getItem('openaiApiKey');
-        const timestamp = localStorage.getItem('installTimestamp');
-        const ontologyResults = await storageService.get('ontologyResults');
+        // Datos críticos para sincronización
+        const syncData = {
+            searchConfig: await storageService.get('searchConfig'),
+            openaiApiKey: await storageService.get('openaiApiKey'),
+            installTimestamp: await storageService.get('installTimestamp'),
+            ontologyResults: await storageService.get('ontologyResults')
+        };
 
-        console.log('📤 Enviando datos al backend:', {
-            config: !!config,
-            apiKey: !!apiKey,
-            timestamp: !!timestamp,
-            ontologyResults: !!ontologyResults
+        console.log('📤 Datos para sincronizar:', {
+            searchConfig: !!syncData.searchConfig,
+            openaiApiKey: !!syncData.openaiApiKey,
+            installTimestamp: !!syncData.installTimestamp,
+            ontologyResults: !!syncData.ontologyResults
         });
 
-        return { config, apiKey, timestamp, ontologyResults };
-    }
-
-    async _sendData(socket, data) {
-        const { config, apiKey, timestamp, ontologyResults } = data;
-        if (config) socket.emit('storage.set_value', { key: 'searchConfig', value: config });
-        if (apiKey) socket.emit('storage.set_value', { key: 'openaiApiKey', value: apiKey });
-        if (timestamp) socket.emit('storage.set_value', { key: 'installTimestamp', value: timestamp });
-        if (ontologyResults) socket.emit('storage.set_value', { key: 'ontologyResults', value: ontologyResults });
+        return syncData;
     }
 
     async getAllData() {
         try {
+            // Obtener llaves de localStorage
             const localStorageKeys = Object.keys(localStorage);
             
-            // Recolectar todos los datos
-            const allData = await this._collectAllData([], localStorageKeys);
+            // Recolectar datos
+            const allData = await this._collectAllData(localStorageKeys);
             
-            // Obtener las llaves reales que tienen datos
-            const availableKeys = Object.keys(allData);
-            const localStorageKeysWithData = localStorageKeys.filter(key => allData[key] !== undefined);
+            // Función para verificar si un valor está realmente definido
+            const hasRealValue = (value) => {
+                if (value === null || value === undefined) return false;
+                if (typeof value === 'object') {
+                    if (Array.isArray(value)) return value.length > 0;
+                    return Object.keys(value).length > 0;
+                }
+                return true;
+            };
+            
+            // Preparar resumen (solo contar llaves con valores reales)
+            const summary = {
+                backend: {
+                    keys: Object.entries(allData.backend)
+                        .filter(([_, value]) => hasRealValue(value))
+                        .map(([key]) => key),
+                    count: Object.values(allData.backend)
+                        .filter(value => hasRealValue(value))
+                        .length
+                },
+                frontend: {
+                    keys: Object.entries(allData.frontend)
+                        .filter(([_, value]) => hasRealValue(value))
+                        .map(([key]) => key),
+                    count: Object.values(allData.frontend)
+                        .filter(value => hasRealValue(value))
+                        .length
+                }
+            };
 
-            console.log('🔑 Llaves con datos:', availableKeys);
-            console.log('📦 Llaves en localStorage con datos:', localStorageKeysWithData);
+            console.log('📊 Resumen de datos:', summary);
 
             return { 
-                availableKeys,
-                localStorageKeys: localStorageKeysWithData, 
-                data: allData 
+                backendKeys: Object.keys(allData.backend), // Mantener todas las llaves para mostrar
+                localStorageKeys: Object.keys(allData.frontend), // Mantener todas las llaves para mostrar
+                data: allData,
+                summary // Agregar el resumen para usar en la presentación
             };
         } catch (error) {
-            console.error('Error getting data:', error);
+            console.error('❌ Error:', error);
             throw error;
         }
     }
 
-    async _collectAllData(availableKeys, localStorageKeys) {
-        const allData = {};
+    async _collectAllData(localStorageKeys) {
+        const allData = {
+            frontend: {},  // Datos del localStorage (via storage.js)
+            backend: {}    // Datos del backend (via storage_service.py)
+        };
         
-        // Datos del storageService
-        for (const key of availableKeys) {
-            try {
-                const value = await storageService.get(key);
-                if (value !== null) allData[key] = value;
-            } catch (error) {
-                console.warn(`⚠️ Error obteniendo ${key}:`, error);
+        // 1. Obtener datos del backend via WebSocket directo
+        if (this._ws.isConnected()) {
+            const install_id = localStorage.getItem('installTimestamp');
+            if (!install_id) {
+                console.warn('⚠️ No hay install_id para obtener datos del backend');
+                return allData;
             }
+
+            try {
+                console.log('📤 Solicitando datos del backend...');
+                // Obtener todos los datos del usuario del backend con timeout de 10s
+                const response = await this._ws.sendRequest('storage.get_all_for_user', {
+                    install_id
+                }, 10000); // 10 segundos de timeout
+
+                if (response && response.status === 'success' && response.data) {
+                    allData.backend = response.data;
+                    console.log('📥 Estado actual del backend:', response.data);
+                } else {
+                    console.warn('⚠️ Respuesta inválida del backend:', response);
+                }
+            } catch (error) {
+                console.error('❌ Error obteniendo datos del backend:', error);
+                if (error.message.includes('Timeout')) {
+                    console.warn('⚠️ El servidor tardó demasiado en responder');
+                }
+            }
+        } else {
+            console.warn('⚠️ No hay conexión WebSocket para obtener datos del backend');
         }
 
-        // Datos adicionales de localStorage
+        // 2. Obtener datos del localStorage via storage.js
         for (const key of localStorageKeys) {
-            if (!allData[key]) {
-                try {
-                    const value = localStorage.getItem(key);
-                    if (value !== null) {
-                        try {
-                            allData[key] = JSON.parse(value);
-                        } catch {
-                            allData[key] = value;
-                        }
+            try {
+                const value = localStorage.getItem(key);
+                if (value !== null) {
+                    try {
+                        allData.frontend[key] = JSON.parse(value);
+                    } catch {
+                        allData.frontend[key] = value;
                     }
-                } catch (error) {
-                    console.warn(`⚠️ Error obteniendo ${key} de localStorage:`, error);
                 }
+            } catch (error) {
+                console.error(`❌ Error frontend [${key}]:`, error);
             }
         }
 
@@ -184,16 +208,64 @@ class StorageTest extends BaseTester {
 
     async clearBackendMemory() {
         try {
-            console.log('🗑️ Iniciando limpieza de memoria en backend...');
-            const socket = window.socket;
-            if (!socket?.connected) {
-                throw new Error('No hay conexión WebSocket disponible');
+            console.log('🗑️ Limpiando memoria');
+            if (!this._ws.isConnected()) {
+                throw new Error('No hay conexión WebSocket');
             }
 
-            socket.emit('storage.clear');
-            console.log('✅ Memoria del backend limpiada');
+            const install_id = localStorage.getItem('installTimestamp');
+            if (!install_id) {
+                throw new Error('No hay install_id para limpiar la memoria');
+            }
+
+            // Obtener todas las claves del backend
+            console.log('📤 Solicitando datos actuales del backend...');
+            const response = await this._ws.sendRequest('storage.get_all_for_user', { install_id });
+            console.log('📥 Datos actuales del backend:', response);
+            
+            if (response.status !== 'success') {
+                throw new Error('Error obteniendo datos del backend');
+            }
+
+            // Valores por defecto según validación del backend
+            const defaultValues = {
+                'searchConfig': { initialized: true },
+                'openaiApiKey': 'sk-reset',
+                'installTimestamp': install_id,
+                'ontologyResults': {
+                    default: {
+                        data: {},
+                        timestamp: Date.now(),
+                        searchCount: 0
+                    }
+                }
+            };
+
+            console.log('🔄 Valores por defecto a establecer:', defaultValues);
+            console.log('🔄 Claves a procesar:', Object.keys(response.data));
+
+            // Limpiar cada clave con su valor por defecto
+            for (const key of Object.keys(response.data)) {
+                if (key in defaultValues) {
+                    const payload = {
+                        key,
+                        value: defaultValues[key],
+                        install_id
+                    };
+                    console.log('📤 Enviando payload para', key + ':', JSON.stringify(payload, null, 2));
+                    try {
+                        const result = await this._ws.sendRequest('storage.set_value', payload);
+                        console.log('📥 Respuesta para', key + ':', result);
+                    } catch (error) {
+                        console.error('❌ Error procesando', key + ':', error);
+                        throw error;
+                    }
+                }
+            }
+
+            console.log('✅ Memoria limpiada');
         } catch (error) {
-            console.error('❌ Error limpiando memoria:', error);
+            console.error('❌ Error:', error);
             throw error;
         }
     }
@@ -202,36 +274,59 @@ class StorageTest extends BaseTester {
 function displayResult(elementId, data) {
     const element = document.getElementById(elementId);
     if (!element) {
-        console.error(`Elemento ${elementId} no encontrado`);
+        console.error('❌ Elemento no encontrado:', elementId);
         return;
     }
+
+    // Función para verificar si un valor está realmente definido
+    const hasRealValue = (value) => {
+        if (value === null || value === undefined) return false;
+        if (typeof value === 'object') {
+            if (Array.isArray(value)) return value.length > 0;
+            return Object.keys(value).length > 0;
+        }
+        return true;
+    };
 
     element.classList.add('results', 'visible');
 
     const html = `
-        <div id="availableKeysSection" class="section">
-            <div class="section-title">Llaves Disponibles (${data.availableKeys.length})</div>
+        <div id="backendSection" class="section">
+            <div class="section-title">Datos en Backend (${data.summary.backend.count} con valor / ${data.backendKeys.length} total)</div>
             <div class="tag-list">
-                ${data.availableKeys.map(key => `<span class="tag">${key}</span>`).join('')}
+                ${data.backendKeys.map(key => {
+                    const hasValue = hasRealValue(data.data.backend[key]);
+                    return `<span class="tag ${hasValue ? 'has-value' : ''}">${key}</span>`;
+                }).join('')}
             </div>
-        </div>
-
-        <div id="localStorageSection" class="section">
-            <div class="section-title">Llaves en LocalStorage (${data.localStorageKeys.length})</div>
-            <div class="tag-list">
-                ${data.localStorageKeys.map(key => `<span class="tag">${key}</span>`).join('')}
-            </div>
-        </div>
-
-        <div id="storedDataSection" class="section">
-            <div class="section-title">Datos Almacenados (${Object.keys(data.data).length})</div>
-            <div class="tag-list">
-                ${Object.entries(data.data).map(([key, value]) => `
-                    <div class="loinc-code" onclick="toggleSection('${key}')" style="cursor: pointer; width: 100%; margin-bottom: 5px;">
+            <div class="data-list">
+                ${Object.entries(data.data.backend).map(([key, value]) => `
+                    <div class="loinc-code" onclick="toggleSection('backend-${key}')" style="cursor: pointer; width: 100%; margin-bottom: 5px;">
                         <span class="code">${key}</span>
                         <span class="description">${getPreview(value)}</span>
                     </div>
-                    <div id="content-${key}" class="json-viewer" style="display: none; width: 100%;">
+                    <div id="content-backend-${key}" class="json-viewer" style="display: none; width: 100%;">
+                        ${formatValue(value)}
+                    </div>
+                `).join('')}
+            </div>
+        </div>
+
+        <div id="frontendSection" class="section">
+            <div class="section-title">Datos en LocalStorage (${data.summary.frontend.count} con valor / ${data.localStorageKeys.length} total)</div>
+            <div class="tag-list">
+                ${data.localStorageKeys.map(key => {
+                    const hasValue = hasRealValue(data.data.frontend[key]);
+                    return `<span class="tag ${hasValue ? 'has-value' : ''}">${key}</span>`;
+                }).join('')}
+            </div>
+            <div class="data-list">
+                ${Object.entries(data.data.frontend).map(([key, value]) => `
+                    <div class="loinc-code" onclick="toggleSection('frontend-${key}')" style="cursor: pointer; width: 100%; margin-bottom: 5px;">
+                        <span class="code">${key}</span>
+                        <span class="description">${getPreview(value)}</span>
+                    </div>
+                    <div id="content-frontend-${key}" class="json-viewer" style="display: none; width: 100%;">
                         ${formatValue(value)}
                     </div>
                 `).join('')}
@@ -242,8 +337,11 @@ function displayResult(elementId, data) {
     element.classList.remove('error');
     _setupToggleFunction();
 
-    const firstKey = data.data ? Object.keys(data.data)[0] : null;
-    if (firstKey) setTimeout(() => window.toggleSection(firstKey), 100);
+    // Mostrar primer dato del backend si existe
+    const firstBackendKey = data.summary.backend.keys[0];
+    if (firstBackendKey) {
+        setTimeout(() => window.toggleSection(`backend-${firstBackendKey}`), 100);
+    }
 }
 
 function getPreview(value) {
@@ -282,7 +380,7 @@ function _setupToggleFunction() {
 function displayError(elementId, error) {
     const element = document.getElementById(elementId);
     if (!element) {
-        console.error(`Elemento ${elementId} no encontrado`);
+        console.error('❌ Elemento no encontrado:', elementId);
         return;
     }
     element.innerHTML = `<div class="error">Error: ${error.message || error}</div>`;
@@ -290,5 +388,4 @@ function displayError(elementId, error) {
 }
 
 export const storageTest = new StorageTest();
-export { displayResult, displayError }; 
-export { displayResult, displayError }; 
+export { displayResult, displayError };

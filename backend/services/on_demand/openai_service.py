@@ -27,7 +27,7 @@ class OpenAIService(LazyLoadService):
             return
             
         super().__init__()
-        logger.info("🤖 Inicializando OpenAI service...")
+        logger.info("🤖 Inicializando OpenAI service")
         
         try:
             self.client = None
@@ -51,20 +51,15 @@ class OpenAIService(LazyLoadService):
     def get_credentials(self, install_id: str) -> Optional[str]:
         """Obtiene las credenciales de OpenAI para un usuario específico"""
         try:
-            logger.info(f"\n{'='*50}")
-            logger.info(f"🔑 Obteniendo credenciales para install_id: {install_id}")
-            
             # Obtener storage de forma lazy
             if not self.storage:
                 logger.error("❌ Storage no disponible")
                 return None
                 
-            logger.info("📤 Solicitando API key del storage...")
             encrypted_key = self.storage.get_value('openaiApiKey', install_id)
-            logger.info(f"📥 API key encriptada: {encrypted_key[:20]}...{encrypted_key[-20:] if encrypted_key else ''}")
             
             if not encrypted_key:
-                logger.error("❌ API key no encontrada en storage")
+                logger.error("❌ API key no encontrada")
                 return None
 
             # Obtener encryption service
@@ -74,9 +69,7 @@ class OpenAIService(LazyLoadService):
                 return None
 
             # Desencriptar API key
-            logger.info("🔓 Intentando desencriptar API key...")
             api_key = encryption_service.decrypt(encrypted_key, install_id)
-            logger.info(f"🔐 API key desencriptada: {api_key[:5]}...{api_key[-5:] if api_key else '[ERROR]'}")
 
             if not api_key:
                 logger.error("❌ Error desencriptando API key")
@@ -84,31 +77,25 @@ class OpenAIService(LazyLoadService):
 
             # Validar formato
             if not api_key.startswith('sk-'):
-                logger.error("❌ API key inválida (debe empezar con sk-)")
+                logger.error("❌ API key inválida")
                 return None
-
-            logger.info("✅ API key obtenida y validada correctamente")
-            logger.info("="*50 + "\n")
             
             return api_key
 
         except Exception as e:
             logger.error(f"❌ Error obteniendo credenciales: {e}")
-            logger.error(f"{'='*50}\n")
             return None
 
     def initialize(self) -> bool:
         """Inicializa el cliente OpenAI con las credenciales"""
         try:
-            logger.info("🔄 Inicializando cliente OpenAI...")
-            
             api_key = self.get_credentials()
             if not api_key:
                 return False
 
             self.client = OpenAI(api_key=api_key)
             self.initialized = True
-            logger.info("✅ Cliente OpenAI inicializado correctamente")
+            logger.info("✅ Cliente OpenAI inicializado")
             return True
 
         except Exception as e:
@@ -124,51 +111,55 @@ class OpenAIService(LazyLoadService):
         temperature: float = DEFAULT_TEMPERATURE,
         system_prompt: str = DEFAULT_SYSTEM_PROMPT
     ) -> Optional[str]:
-        """Procesa una consulta usando OpenAI"""
-        if not user_prompt:
-            return "Se requiere un mensaje para procesar"
-
-        if not install_id:
-            return "Se requiere ID de instalación"
-
+        """Procesa una consulta con OpenAI"""
         try:
-            # Log de parámetros
-            logger.info(f"🔄 Procesando consulta:")
-            logger.info(f"📝 Prompt: {user_prompt[:50]}...")
-            logger.info(f"🤖 Modelo: {model}")
-            logger.info(f"🌡️ Temperatura: {temperature}")
+            logger.info("🔄 Procesando consulta OpenAI")
             
-            # Inicializar cliente si es necesario
-            if not self.client:
-                api_key = self.get_credentials(install_id)
-                if not api_key:
-                    return "Por favor, configura tu API key de OpenAI en el panel de configuración antes de continuar"
-                self.client = OpenAI(api_key=api_key)
-                logger.info("✅ Cliente OpenAI inicializado")
-            
-            # Construir mensajes
-            messages = [{"role": "system", "content": system_prompt}]
-            
-            # Añadir historial si existe
-            if chat_history:
-                messages.extend([
-                    {"role": msg["role"], "content": msg["content"]}
-                    for msg in chat_history
-                ])
-            
-            # Añadir mensaje actual
-            messages.append({"role": "user", "content": user_prompt})
+            # Obtener credenciales
+            api_key = self.get_credentials(install_id)
+            if not api_key:
+                return None
 
-            response = self.client.chat.completions.create(
+            # Crear cliente con las credenciales del usuario
+            client = OpenAI(api_key=api_key)
+
+            # Preparar mensajes
+            messages = []
+            
+            # Añadir system prompt
+            if system_prompt:
+                messages.append({
+                    "role": "system",
+                    "content": system_prompt
+                })
+
+            # Añadir historial de chat
+            if chat_history:
+                messages.extend(chat_history)
+
+            # Añadir prompt actual
+            messages.append({
+                "role": "user",
+                "content": user_prompt
+            })
+
+            # Realizar llamada a OpenAI
+            response = client.chat.completions.create(
                 model=model,
-                temperature=temperature,
-                messages=messages
+                messages=messages,
+                temperature=temperature
             )
-            
+
+            # Extraer respuesta
+            if not response.choices:
+                logger.error("❌ No se obtuvo respuesta de OpenAI")
+                return None
+
             result = response.choices[0].message.content
-            logger.info("✅ Respuesta obtenida correctamente")
-            return result
+            logger.info("✅ Respuesta obtenida")
             
+            return result
+
         except Exception as e:
             logger.error(f"❌ Error procesando consulta: {e}")
             return None

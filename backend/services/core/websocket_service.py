@@ -105,6 +105,55 @@ class WebSocketService(LazyLoadService):
                 emit('encryption.master_key', {'status': 'error', 'message': error_msg})
 
         # Handlers de storage (core)
+        @self.socketio.on('storage.get_all_for_user')
+        def handle_get_all_for_user(data: Dict[str, Any]):
+            logger.info("📥 Solicitud de storage.get_all_for_user recibida")
+            logger.debug(f"Datos recibidos: {data}")
+            
+            install_id = data.get('install_id')
+            request_id = data.get('request_id')
+            
+            if not self.storage:
+                error_msg = "❌ StorageService no disponible"
+                logger.error(error_msg)
+                emit('storage.all_data', {
+                    'status': 'error',
+                    'message': error_msg,
+                    'request_id': request_id
+                })
+                return
+                
+            if not install_id:
+                error_msg = "install_id es requerido"
+                logger.error(error_msg)
+                emit('storage.all_data', {
+                    'status': 'error',
+                    'message': error_msg,
+                    'request_id': request_id
+                })
+                return
+
+            try:
+                logger.debug(f"Obteniendo datos para install_id: {install_id}")
+                all_data = self.storage.get_all_for_user(install_id)
+                logger.debug(f"Datos obtenidos: {all_data}")
+                
+                emit('storage.all_data', {
+                    'status': 'success',
+                    'data': all_data,
+                    'request_id': request_id
+                })
+                logger.info("✅ Datos enviados correctamente")
+                
+            except Exception as e:
+                error_msg = f"Error en handle_get_all_for_user: {e}"
+                logger.error(error_msg)
+                emit('storage.all_data', {
+                    'status': 'error',
+                    'message': str(e),
+                    'request_id': request_id
+                })
+        
         @self.socketio.on('storage.set_value')
         def handle_set_value(data: Dict[str, Any]):
             key = data.get('key')
@@ -156,7 +205,7 @@ class WebSocketService(LazyLoadService):
                     'message': str(e),
                     'request_id': request_id
                 })
-
+                
         @self.socketio.on('storage.get_value')
         def handle_get_value(data: Dict[str, Any]):
             key = data.get('key')

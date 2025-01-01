@@ -1,9 +1,10 @@
-export class OpenAITester {
+import { BaseTester } from './base.js';
+
+export class OpenAITester extends BaseTester {
     constructor() {
-        this.socket = null;
+        super();
+        console.log('🔄 Inicializando OpenAITester');
         this.messages = [];
-        this.isConnected = false;
-        this.onConnectionChange = null;
         this.onMessageReceived = null;
         this.onTypingStart = null;
         this.onTypingEnd = null;
@@ -32,40 +33,9 @@ export class OpenAITester {
         console.log('📝 System prompt configurado:', prompt);
     }
 
-    async connect() {
-        if (this.socket?.connected) {
-            console.log('🔌 Ya conectado al servidor');
-            return;
-        }
-
-        console.log('🔌 Conectando al servidor...');
-        this.socket = io('http://localhost:5001', {
-            transports: ['websocket']
-        });
-
-        this.socket.on('connect', () => {
-            console.log('✅ Conectado al servidor');
-            this.isConnected = true;
-            this.onConnectionChange?.(true);
-        });
-
-        this.socket.on('disconnect', () => {
-            console.log('❌ Desconectado del servidor');
-            this.isConnected = false;
-            this.onConnectionChange?.(false);
-        });
-
-        this.socket.on('connect_error', (error) => {
-            console.error('❌ Error de conexión:', error);
-            this.isConnected = false;
-            this.onConnectionChange?.(false);
-        });
-
+    async initialize() {
         // Escuchar respuestas de OpenAI
-        this.socket.on('openai.test_result', (response) => {
-            console.log('📩 Respuesta recibida:', response);
-            this.onTypingEnd?.();
-
+        this._ws.socket.on('openai.test_result', (response) => {
             if (response.status === 'success') {
                 // Añadir respuesta al historial
                 this.messages.push({
@@ -74,14 +44,15 @@ export class OpenAITester {
                 });
                 this.onMessageReceived?.(response.response, false);
             } else {
-                console.error('❌ Error:', response.message || 'Error desconocido');
+                console.error('❌ Error en respuesta:', response.message || 'Error desconocido');
                 this.onMessageReceived?.(response.message || 'Error desconocido', true);
             }
+            this.onTypingEnd?.();
         });
     }
 
     async sendMessage(message) {
-        if (!this.socket?.connected) {
+        if (!this.isConnected) {
             throw new Error('No hay conexión con el servidor');
         }
 
@@ -110,24 +81,12 @@ export class OpenAITester {
             systemPrompt: this.config.systemPrompt
         };
 
-        console.log('📤 Enviando payload:', {
-            ...payload,
-            messages: `${payload.messages.length} mensajes`
-        });
-
-        // Enviar mensaje
-        this.socket.emit('openai.test_search', payload);
+        // Enviar mensaje usando socket.emit
+        this._ws.socket.emit('openai.test_search', payload);
     }
 
     clearHistory() {
         this.messages = [];
         console.log('🧹 Historial limpiado');
-    }
-
-    disconnect() {
-        if (this.socket) {
-            this.socket.disconnect();
-            this.socket = null;
-        }
     }
 } 

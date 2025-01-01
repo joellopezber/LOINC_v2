@@ -185,6 +185,7 @@ class OntologyService(LazyLoadService):
     def process_term(
         self, 
         term: str,
+        install_id: str,
         model: str = "gpt-4o",
         temperature: float = 0.75
     ) -> Optional[Dict[str, Any]]:
@@ -192,8 +193,9 @@ class OntologyService(LazyLoadService):
         Procesa un término médico usando OpenAI para obtener información estructurada
         Args:
             term: Término médico a analizar
+            install_id: ID de instalación del usuario
             model: Modelo de OpenAI a usar (default: gpt-4o)
-            temperature: Temperatura para la respuesta (default: 0.5)
+            temperature: Temperatura para la respuesta (default: 0.75)
         Returns:
             Dict con la información estructurada o None si hay error
         """
@@ -206,6 +208,7 @@ class OntologyService(LazyLoadService):
             logger.info("=" * 50)
             logger.info("🔍 INICIO PROCESO DE TÉRMINO")
             logger.info(f"📝 Término recibido: '{term}'")
+            logger.info(f"🔑 Install ID: {install_id}")
             logger.info(f"⚙️ Configuración: model={model}, temperature={temperature}")
 
             # Validar término
@@ -235,6 +238,7 @@ class OntologyService(LazyLoadService):
             logger.info("🚀 Enviando solicitud a OpenAI...")
             response = self.openai_service.process_query(
                 user_prompt=user_prompt,
+                install_id=install_id,
                 model=model,
                 temperature=temperature,
                 system_prompt=DEFAULT_SYSTEM_PROMPT
