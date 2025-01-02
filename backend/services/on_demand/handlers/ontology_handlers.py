@@ -1,6 +1,6 @@
 import logging
 from typing import Dict, Any
-from ...on_demand.ontology_service import ontology_service
+from ..services.ontology_service import ontology_service
 
 logger = logging.getLogger(__name__)
 

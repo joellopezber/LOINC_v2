@@ -26,13 +26,11 @@ class EncryptionService(LazyLoadService):
             return
             
         super().__init__()
-        logger.info("🔐 Inicializando Encryption service...")
-        
         try:
-            self.install_keys = {}  # Diccionario para almacenar claves por installTimestamp
-            self._master_key_service = None
+            self._master_key = None
+            self.install_keys = {}  # Inicializar el diccionario de claves por instalación
             self._set_initialized(True)
-            
+            logger.debug("🔐 Encryption inicializado")
         except Exception as e:
             self._set_initialized(False, str(e))
             raise
@@ -51,110 +49,98 @@ class EncryptionService(LazyLoadService):
         if install_timestamp not in self.install_keys:
             # Obtener la clave del master_key_service
             if not self.master_key_service:
-                logger.error("❌ MasterKeyService no disponible")
+                logger.error("❌ MasterKey no disponible")
                 return None
                 
             self.install_keys[install_timestamp] = self.master_key_service.get_key_for_install(install_timestamp)
         
-        return self.install_keys[install_timestamp]
+        return self.install_keys.get(install_timestamp)
 
     def _derive_key(self, salt, master_key):
         """
-        Deriva una clave usando HKDF, igual que en el frontend
+        Deriva una clave usando PBKDF2
         """
         # Convertir master_key de hex a bytes
         key_bytes = bytes.fromhex(master_key)
         
-        # Usar HKDF para derivar la clave
-        hkdf = HKDF(
+        # Usar PBKDF2 para derivar la clave
+        kdf = PBKDF2HMAC(
             algorithm=hashes.SHA256(),
             length=32,
             salt=salt,
-            info=b'',
+            iterations=100000,
         )
         
-        return hkdf.derive(key_bytes)
+        return kdf.derive(key_bytes)
 
-    def encrypt(self, data, install_timestamp):
-        """
-        Encripta datos usando AES-GCM, igual que el frontend
-        """
+    def encrypt(self, data: str, install_id: str) -> Optional[str]:
+        """Encripta datos usando la master key"""
         try:
-            if not data:
+            if not data or not install_id:
                 return None
-                
-            # Obtener master key
-            master_key = self.get_key_for_install(install_timestamp)
+
+            # Obtener la master key
+            master_key = self.get_key_for_install(install_id)
             if not master_key:
-                logger.error("❌ No se pudo obtener master key")
                 return None
-            
-            # Generar salt y IV aleatorios
+
+            # Generar salt aleatorio
             salt = os.urandom(16)
-            iv = os.urandom(12)
-            
-            # Derivar clave específica
+
+            # Derivar clave usando PBKDF2
             key = self._derive_key(salt, master_key)
-            
-            # Encriptar usando AES-GCM
-            aesgcm = AESGCM(key)
-            encrypted_data = aesgcm.encrypt(iv, data.encode(), None)
-            
-            # Combinar salt + iv + datos encriptados
-            result = salt + iv + encrypted_data
-            
+
+            # Crear cipher
+            cipher = AESGCM(key)
+
+            # Generar IV aleatorio
+            iv = os.urandom(12)
+
+            # Encriptar datos
+            encrypted = cipher.encrypt(iv, data.encode(), None)
+
+            # Combinar salt + iv + encrypted en un solo buffer
+            result = salt + iv + encrypted
+
             # Convertir a base64
             return base64.b64encode(result).decode()
-            
+
         except Exception as e:
-            logger.error(f"Error en encriptación: {e}")
-            logger.error(traceback.format_exc())
+            logger.error(f"❌ Error encriptando: {e}")
             return None
 
-    def decrypt(self, encrypted_data: str, install_timestamp: str) -> Optional[str]:
-        """
-        Desencripta datos usando AES-GCM
-        
-        Args:
-            encrypted_data: Datos encriptados en base64
-            install_timestamp: Timestamp de instalación
-            
-        Returns:
-            Datos desencriptados o None si hay error
-        """
+    def decrypt(self, encrypted_b64: str, install_id: str) -> Optional[str]:
+        """Desencripta datos usando la master key"""
         try:
-            if not encrypted_data:
+            if not encrypted_b64 or not install_id:
                 return None
 
-            # 1. Obtener master key
-            master_key = self.get_key_for_install(install_timestamp)
+            # Obtener la master key
+            master_key = self.get_key_for_install(install_id)
             if not master_key:
-                logger.error("❌ No se pudo obtener la master key")
                 return None
-            
-            # 2. Decodificar datos encriptados
-            decoded_data = base64.b64decode(encrypted_data)
-            
-            # 3. Extraer salt, iv y contenido
-            salt = decoded_data[:16]
-            iv = decoded_data[16:28]
-            content = decoded_data[28:]
-            
-            # 4. Derivar clave específica usando HKDF
+
+            # Decodificar base64
+            encrypted_data = base64.b64decode(encrypted_b64)
+
+            # Extraer salt, iv y contenido
+            salt = encrypted_data[:16]
+            iv = encrypted_data[16:28]
+            content = encrypted_data[28:]
+
+            # Derivar clave usando PBKDF2
             key = self._derive_key(salt, master_key)
-            
-            # 5. Desencriptar usando AES-GCM
-            aesgcm = AESGCM(key)
-            decrypted_data = aesgcm.decrypt(iv, content, None)
-            
-            # 6. Decodificar a string
-            result = decrypted_data.decode()
-            logger.info("✅ Datos desencriptados correctamente")
-            return result
+
+            # Crear cipher
+            cipher = AESGCM(key)
+
+            # Desencriptar
+            decrypted = cipher.decrypt(iv, content, None)
+
+            return decrypted.decode()
 
         except Exception as e:
-            logger.error(f"❌ Error desencriptando datos: {e}")
-            logger.error(traceback.format_exc())
+            logger.error(f"❌ Error desencriptando: {e}")
             return None
 
 # Crear instancia global

@@ -2,8 +2,8 @@ import os
 import logging
 from openai import OpenAI
 from typing import Optional, Dict, Any, List
-from ..lazy_load_service import LazyLoadService, lazy_load
-from ..service_locator import service_locator
+from ...lazy_load_service import LazyLoadService, lazy_load
+from ...service_locator import service_locator
 
 # Configurar logging
 logger = logging.getLogger(__name__)
@@ -16,28 +16,23 @@ DEFAULT_SYSTEM_PROMPT = """Responde la pregunta del usuario de manera clara y co
 class OpenAIService(LazyLoadService):
     _instance = None
 
-    def __new__(cls, socketio=None):
+    def __new__(cls):
         if cls._instance is None:
             cls._instance = super(OpenAIService, cls).__new__(cls)
         return cls._instance
 
-    def __init__(self, socketio=None):
+    def __init__(self):
         """Inicializa el servicio OpenAI de forma lazy"""
         if hasattr(self, '_initialized'):
             return
             
         super().__init__()
-        logger.info("🤖 Inicializando OpenAI service")
+        logger.debug("🤖 Inicializando OpenAI service")
         
         try:
             self.client = None
             self._storage = None
             self._set_initialized(True)
-            
-            self.socketio = socketio
-            if socketio:
-                self._register_handlers()
-            
         except Exception as e:
             self._set_initialized(False, str(e))
             raise
@@ -164,15 +159,47 @@ class OpenAIService(LazyLoadService):
             logger.error(f"❌ Error procesando consulta: {e}")
             return None
 
-    def _register_handlers(self):
-        if self.socketio:
-            @self.socketio.on('openai.test_search')
-            def handle_test_search(data):
-                try:
-                    # ... lógica del handler
-                    pass
-                except Exception as e:
-                    logger.error(f"Error: {str(e)}")
+    def register_handlers(self, socketio):
+        """Registra los handlers de eventos para OpenAI"""
+        if not socketio:
+            return
+            
+        logger.debug("🤖 Registrando handlers OpenAI")
+        
+        @socketio.on('openai.test')
+        def handle_test(data):
+            try:
+                # Validar datos
+                if not isinstance(data, dict):
+                    logger.error("❌ Datos inválidos para test")
+                    emit('openai.test_result', {
+                        'status': 'error',
+                        'message': 'Datos inválidos'
+                    })
+                    return
+
+                # Procesar test
+                result = self.process_test(data)
+                if not result:
+                    logger.error("❌ Error procesando test")
+                    emit('openai.test_result', {
+                        'status': 'error',
+                        'message': 'Error procesando test'
+                    })
+                    return
+
+                # Emitir resultado
+                emit('openai.test_result', {
+                    'status': 'success',
+                    'data': result
+                })
+
+            except Exception as e:
+                logger.error(f"❌ Error en test: {str(e)}")
+                emit('openai.test_result', {
+                    'status': 'error',
+                    'message': str(e)
+                })
 
 # Instancia del servicio
 openai_service = OpenAIService() 

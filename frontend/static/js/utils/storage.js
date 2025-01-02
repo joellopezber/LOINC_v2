@@ -49,7 +49,6 @@ const configSchema = {
 
 class LocalStorage {
     constructor() {
-        console.debug('[LocalStorage] Creando instancia...');
         this.initialized = false;
         
         // Asegurar que installTimestamp existe
@@ -63,18 +62,15 @@ class LocalStorage {
      */
     async initialize() {
         if (this.initialized) {
-            console.debug('[LocalStorage] Ya inicializado, omitiendo...');
             return true;
         }
 
         try {
-            console.debug('[LocalStorage] Iniciando...');
             await this._loadConfig();
             this.initialized = true;
-            console.debug('[LocalStorage] ✅ Inicializado correctamente');
             return true;
         } catch (error) {
-            console.error('[LocalStorage] Error en inicialización:', error);
+            console.error('[LocalStorage] Error:', error);
             return false;
         }
     }

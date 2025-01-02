@@ -1,5 +1,5 @@
 import logging
-from ...on_demand.openai_service import openai_service
+from ..services.openai_service import openai_service
 
 logger = logging.getLogger(__name__)
 

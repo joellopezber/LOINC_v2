@@ -2,9 +2,6 @@ import os
 import logging
 from flask import Flask
 from flask_cors import CORS
-from flask_socketio import SocketIO
-from services.core.websocket_service import WebSocketService
-from services.core.storage_service import StorageService
 from services.service_locator import service_locator
 from routes.test_routes import test_routes
 from routes.app_routes import app_routes
@@ -33,48 +30,74 @@ def init_services(app):
     """Inicializa los servicios core de la aplicación"""
     try:
         # Inicializar todos los servicios core usando el service_locator
-        websocket = service_locator.initialize_core_services(app)
-        return websocket
-        
+        service_locator.initialize_core_services(app)
     except Exception as e:
         logger.error(f"❌ Error inicializando servicios core: {e}")
         raise
 
-def register_routes(app, websocket):
+def register_routes(app):
     """Registra todas las rutas de la aplicación"""
-    app.register_blueprint(app_routes)
-    app.register_blueprint(api_routes)
-    
-    if os.environ.get('FLASK_ENV') == 'development':
-        app.register_blueprint(test_routes)
-    
-    init_socket_routes(websocket.socketio)
+    try:
+        # Registrar blueprints
+        app.register_blueprint(app_routes)
+        app.register_blueprint(api_routes)
+        
+        if os.environ.get('FLASK_ENV') == 'development':
+            app.register_blueprint(test_routes)
+        
+        # Obtener websocket service para rutas de socket
+        websocket_service = service_locator.get('websocket')
+        if websocket_service and websocket_service.socketio:
+            init_socket_routes(websocket_service.socketio)
+            
+        logger.info("✅ Rutas registradas")
+    except Exception as e:
+        logger.error(f"❌ Error registrando rutas: {e}")
+        raise
 
-def run_server(app, websocket):
+def run_server(app):
     """Inicia el servidor según el entorno"""
-    if os.environ.get('FLASK_ENV') == 'development':
-        print("\n🚀 Servidor de desarrollo iniciado en http://localhost:5001")
-        print("   - Tests Index: http://localhost:5001/tests\n")
-        websocket.run()
-    else:
-        print("🚀 Servidor de producción iniciado")
-        from gevent import pywsgi
-        from geventwebsocket.handler import WebSocketHandler
-        server = pywsgi.WSGIServer(('', 5001), app, handler_class=WebSocketHandler)
-        server.serve_forever()
+    try:
+        websocket_service = service_locator.get('websocket')
+        if not websocket_service:
+            raise ValueError("WebSocket service no disponible")
+
+        if os.environ.get('FLASK_ENV') == 'development':
+            print("\n🚀 Servidor de desarrollo iniciado en http://localhost:5001")
+            print("   - Tests Index: http://localhost:5001/tests\n")
+            websocket_service.run()
+        else:
+            print("🚀 Servidor de producción iniciado")
+            from gevent import pywsgi
+            from geventwebsocket.handler import WebSocketHandler
+            server = pywsgi.WSGIServer(('', 5001), app, handler_class=WebSocketHandler)
+            server.serve_forever()
+    except Exception as e:
+        logger.error(f"❌ Error iniciando servidor: {e}")
+        raise
+
+def main():
+    """Función principal de inicialización"""
+    try:
+        # Configuración inicial
+        configure_logging()
+        logger.info("🔧 Logging configurado")
+        
+        # Crear y configurar app
+        app = create_app()
+        logger.info("✅ Flask inicializado")
+        
+        # Inicializar servicios
+        init_services(app)
+        
+        # Registrar rutas
+        register_routes(app)
+        
+        # Iniciar servidor
+        run_server(app)
+    except Exception as e:
+        logger.error(f"❌ Error fatal iniciando aplicación: {e}")
+        raise
 
 if __name__ == '__main__':
-    # Configuración inicial
-    configure_logging()
-    
-    # Crear y configurar app
-    app = create_app()
-    
-    # Inicializar servicios
-    websocket = init_services(app)
-    
-    # Registrar rutas
-    register_routes(app, websocket)
-    
-    # Iniciar servidor
-    run_server(app, websocket) 
+    main() 

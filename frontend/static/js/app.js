@@ -22,52 +22,43 @@ class App {
 
     async initialize() {
         try {
-            console.log('🚀 Iniciando aplicación...');
+            console.group('🚀 Iniciando aplicación...');
             
-            // 1. Inicializar Servicios Core
             await this._initializeServices();
-            
-            // 2. Inicializar Componentes UI
             await this._initializeComponents();
-            
-            // 3. Configurar Event Listeners
             this._setupEventListeners();
             
-            console.log('✨ Aplicación inicializada correctamente');
+            console.groupEnd();
+            console.log('✨ Aplicación lista');
             return true;
         } catch (error) {
-            console.error('❌ Error inicializando aplicación:', error);
+            console.error('❌ Error:', error);
             return false;
         }
     }
 
     async _initializeServices() {
-        // 1. Storage (más básico primero)
         this.services.storage = storage;
         await this.services.storage.initialize();
-        console.log('✅ Storage inicializado');
+        console.log('├── 💾 Storage');
 
-        // 2. WebSocket (depende de storage para el installId)
         this.services.websocket = websocketService;
         await this.services.websocket.connect();
-        console.log('✅ WebSocket conectado');
+        console.log('├── 🔌 WebSocket');
 
-        // 3. StorageService (depende de ambos anteriores)
         this.services.storageService = storageService;
         await this.services.storageService.initialize();
-        console.log('✅ StorageService inicializado');
+        console.log('├── 🔧 StorageService');
 
-        // 4. API Client
         this.services.apiClient = apiClient;
-        console.log('✅ API Client inicializado');
+        console.log('└── 🔨 API Client');
     }
 
     async _initializeComponents() {
-        // Inicializar componentes con las dependencias necesarias
         this.components.search = new SearchComponent(this.services);
         this.components.configModal = new ConfigModal(this.services);
         
-        console.log('✅ Componentes inicializados');
+        console.log('└── 🎯 Componentes');
     }
 
     _setupEventListeners() {

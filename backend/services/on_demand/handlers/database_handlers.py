@@ -1,6 +1,6 @@
 import logging
 from typing import Dict, Any
-from ...on_demand.database_search_service import database_search_service
+from ..services.database_search_service import database_search_service
 
 logger = logging.getLogger(__name__)
 

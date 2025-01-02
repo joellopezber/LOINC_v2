@@ -1,7 +1,7 @@
 // Search Component
 class SearchComponent {
     constructor() {
-        console.log('Inicializando SearchComponent');
+        console.log('├── 🔍 SearchComponent');
         this.searchInput = document.querySelector('.search-input');
         this.searchButton = document.querySelector('.search-button');
         this.searchForm = document.querySelector('.search-box');
@@ -15,8 +15,6 @@ class SearchComponent {
     }
 
     initializeEvents() {
-        console.log('Inicializando eventos de búsqueda');
-        
         this.searchButton.addEventListener('click', (e) => {
             e.preventDefault();
             e.stopPropagation();
@@ -34,7 +32,7 @@ class SearchComponent {
         // Escuchar resultados de búsqueda
         if (window.socket) {
             window.socket.on('search.results', (data) => {
-                console.log('Resultados de búsqueda recibidos:', data);
+                console.log('🔍 SearchComponent: Resultados de búsqueda recibidos:', data);
                 this.handleSearchResults(data);
             });
         }

@@ -15,95 +15,155 @@ class ServiceLocator:
     def __init__(self):
         self._services: Dict[str, Any] = {}
         self._initialized = False
-        logger.info("🔧 Service Locator inicializado")
+        logger.debug("🔧 Service Locator inicializado")
     
-    def initialize_core_services(self, app) -> Any:
-        """
-        Inicializa los servicios core en el orden correcto
+    def initialize_core_services(self, app) -> None:
+        """Inicializa todos los servicios core"""
+        if self._initialized:
+            return
         
-        Args:
-            app: Instancia de Flask
-            
-        Returns:
-            WebSocketService: Instancia del servicio WebSocket
-        """
         try:
-            logger.info("🚀 Iniciando servicios core...")
+            logger.info("🚀 Iniciando servicios core")
             self.clear()
             
             # 1. Servicios de seguridad
-            websocket = self._init_core_services(app)
+            self._init_security_services()
+            
+            # 2. Servicios de comunicación
+            self._init_communication_services(app)
+            
+            # 3. Servicios de datos
+            self._init_data_services()
             
             logger.info("✅ Servicios core inicializados")
-            return websocket
+            self._initialized = True
             
         except Exception as e:
             logger.error(f"❌ Error inicializando servicios core: {e}")
             raise
 
-    def _init_core_services(self, app):
-        """
-        Inicializa los servicios core en orden
-        
-        Args:
-            app: Instancia de Flask
-            
-        Returns:
-            WebSocketService: Instancia del servicio WebSocket
-        """
+    def _init_security_services(self):
+        """Inicializa servicios de seguridad"""
         try:
-            # 1. Servicios de seguridad
             from .core.master_key_service import master_key_service
             from .core.encryption_service import encryption_service
+            
+            # Registrar servicios
             self.register('master_key', master_key_service)
             self.register('encryption', encryption_service)
-            logger.info("✅ Servicios de seguridad inicializados")
             
-            # 2. Servicios de comunicación
-            from .core.websocket_service import WebSocketService
-            websocket = WebSocketService(app)
-            self.register('websocket', websocket)
-            logger.info("✅ Servicios de comunicación inicializados")
-            
-            # 3. Servicios de datos
-            from .core.storage_service import StorageService
-            storage = StorageService()
-            self.register('storage', storage)
-            logger.info("✅ Servicios de datos inicializados")
-            
-            # 4. Servicios on demand
-            from .on_demand.openai_service import OpenAIService
-            from .on_demand.ontology_service import ontology_service
-            from .on_demand.database_search_service import database_search_service
-            openai = OpenAIService(websocket)
-            self.register('openai', openai)
-            self.register('ontology', ontology_service)
-            self.register('database_search', database_search_service)
-            logger.info("✅ Servicios on demand inicializados")
-            
-            return websocket
+            logger.debug("🔐 Servicios de seguridad inicializados")
             
         except Exception as e:
-            logger.error(f"❌ Error inicializando servicios core: {str(e)}")
+            logger.error(f"❌ Error inicializando servicios de seguridad: {e}")
             raise
-    
-    def register(self, name: str, service: Any) -> bool:
+
+    def _init_communication_services(self, app):
+        """Inicializa servicios de comunicación"""
+        try:
+            from .core.websocket_service import WebSocketService
+            
+            # Inicializar WebSocket
+            websocket = WebSocketService(app)
+            self.register('websocket', websocket)
+            
+            logger.debug("🔌 Servicios de comunicación inicializados")
+            
+        except Exception as e:
+            logger.error(f"❌ Error inicializando servicios de comunicación: {e}")
+            raise
+
+    def _init_data_services(self):
+        """Inicializa servicios de datos"""
+        try:
+            from .core.storage_service import storage_service
+            
+            # Registrar Storage
+            self.register('storage', storage_service)
+            
+            logger.debug("💾 Servicios de datos inicializados")
+            
+        except Exception as e:
+            logger.error(f"❌ Error inicializando servicios de datos: {e}")
+            raise
+
+    def get_on_demand_service(self, name: str) -> Optional[Any]:
+        """Obtiene un servicio on-demand, registrándolo si es necesario"""
+        try:
+            # Si ya está registrado, devolverlo
+            if self.is_registered(name):
+                return self.get(name)
+
+            # Validar dependencias antes de registrar
+            if not self.validate_dependencies(name):
+                logger.error(f"❌ Dependencias no satisfechas para {name}")
+                return None
+
+            # Obtener websocket si está disponible
+            websocket = self.get('websocket')
+            socketio = websocket.socketio if websocket else None
+
+            # Registrar según el tipo de servicio
+            service = None
+            if name == 'openai':
+                from .on_demand.services.openai_service import openai_service
+                service = openai_service
+                logger.debug("🤖 Cargando servicio OpenAI")
+            elif name == 'ontology':
+                from .on_demand.services.ontology_service import ontology_service
+                service = ontology_service
+                logger.debug("🔍 Cargando servicio Ontología")
+            elif name == 'database_search':
+                from .on_demand.services.database_search_service import database_search_service
+                service = database_search_service
+                logger.debug("🔍 Cargando servicio Database")
+
+            # Configurar socketio si está disponible
+            if service and socketio:
+                service.socketio = socketio
+
+            # Registrar y devolver
+            if service and self.register(name, service):
+                return service
+            return None
+
+        except Exception as e:
+            logger.error(f"❌ Error registrando servicio on-demand {name}: {e}")
+            return None
+
+    def validate_dependencies(self, service_name: str) -> bool:
         """
-        Registra un servicio
+        Valida que las dependencias de un servicio estén disponibles
         
         Args:
-            name: Nombre del servicio
-            service: Instancia del servicio
+            service_name: Nombre del servicio a validar
             
         Returns:
-            bool: True si se registró correctamente
+            bool: True si todas las dependencias están disponibles
         """
+        dependencies = {
+            'openai': ['storage', 'encryption', 'websocket'],
+            'ontology': ['openai', 'storage'],
+            'database_search': ['storage']
+        }
+
+        required_deps = dependencies.get(service_name, [])
+        missing_deps = [dep for dep in required_deps if not self.is_registered(dep)]
+        
+        if missing_deps:
+            logger.error(f"❌ Faltan dependencias para {service_name}: {missing_deps}")
+            return False
+            
+        return True
+    
+    def register(self, name: str, service: Any) -> bool:
+        """Registra un servicio"""
         try:
             if name in self._services:
-                logger.warning(f"⚠️ Servicio {name} ya registrado, actualizando...")
+                return True
             
             self._services[name] = service
-            logger.info(f"✅ Servicio {name} registrado correctamente")
+            logger.debug(f"✅ Servicio {name} registrado")
             return True
             
         except Exception as e:
@@ -120,15 +180,22 @@ class ServiceLocator:
         Returns:
             Instancia del servicio o None si no existe
         """
+        # Primero intentar obtener servicio core
         service = self._services.get(name)
-        if service is None:
-            logger.error(f"❌ Servicio {name} no encontrado")
-        return service
+        if service is not None:
+            return service
+            
+        # Si no existe, intentar cargar on-demand
+        if name in ['openai', 'ontology', 'database_search']:
+            return self.get_on_demand_service(name)
+            
+        logger.error(f"❌ Servicio {name} no encontrado")
+        return None
     
     def clear(self):
         """Limpia todos los servicios registrados"""
         self._services.clear()
-        logger.info("🧹 Service Locator limpiado")
+        logger.debug("🧹 Service Locator limpiado")
     
     def is_registered(self, name: str) -> bool:
         """

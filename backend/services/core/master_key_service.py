@@ -3,6 +3,8 @@ import os
 import hashlib
 from typing import Optional
 from ..lazy_load_service import LazyLoadService
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 
 logger = logging.getLogger(__name__)
 
@@ -20,65 +22,57 @@ class MasterKeyService(LazyLoadService):
             return
             
         super().__init__()
-        logger.info("🔐 Inicializando MasterKey service...")
-        
         try:
-            self.salt_master_key = os.environ.get('SALT_MASTER_KEY')
+            # Obtener salt del .env
+            salt_hex = os.getenv('SALT_MASTER_KEY')
+            if not salt_hex:
+                raise ValueError("SALT_MASTER_KEY no encontrada en .env")
             
-            if not self.salt_master_key:
-                error_msg = "❌ SALT_MASTER_KEY no encontrada en variables de entorno"
-                self._set_initialized(False, error_msg)
-                raise ValueError(error_msg)
+            # Validar longitud
+            if len(salt_hex) != 64:  # 32 bytes = 64 chars hex
+                raise ValueError("SALT_MASTER_KEY debe ser 32 bytes (64 caracteres hex)")
                 
-            self._set_initialized(True)
-            logger.info("✅ SALT_MASTER_KEY cargada correctamente")
+            try:
+                # Convertir de hex a bytes
+                self.salt_master_key = bytes.fromhex(salt_hex)
+            except ValueError as e:
+                raise ValueError("SALT_MASTER_KEY debe ser un valor hexadecimal válido")
             
+            self._set_initialized(True)
+            logger.debug("🔐 MasterKey inicializado")
         except Exception as e:
             self._set_initialized(False, str(e))
             raise
 
-    def get_key_for_install(self, install_timestamp: str) -> Optional[str]:
+    def get_salt_master_key(self) -> bytes:
+        """Obtiene la salt master key"""
+        return self.salt_master_key
+
+    def get_key_for_install(self, install_timestamp: str) -> str:
         """
-        Genera una master key única para una instalación
-        
+        Genera una clave determinista para una instalación específica.
         Args:
-            install_timestamp: Timestamp de instalación
-            
+            install_timestamp: Timestamp de instalación como string
         Returns:
-            Master key en formato hexadecimal o None si hay error
+            Clave hexadecimal de 32 bytes (64 caracteres hex)
         """
         try:
-            if not self.salt_master_key:
-                logger.error("❌ No se puede generar master key - SALT no disponible")
-                return None
-                
-            if not install_timestamp:
-                logger.error("❌ No se puede generar master key - timestamp no válido")
-                return None
-
-            # Convertir timestamp a bytes
-            timestamp_bytes = str(install_timestamp).encode()
-            
-            # Usar PBKDF2 para derivar una clave segura
-            from cryptography.hazmat.primitives import hashes
-            from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
-            
+            # Usar PBKDF2 para generar una clave determinista
             kdf = PBKDF2HMAC(
                 algorithm=hashes.SHA256(),
-                length=32,  # 32 bytes = 256 bits
-                salt=bytes.fromhex(self.salt_master_key),
+                length=32,
+                salt=self.salt_master_key,
                 iterations=100000,
             )
             
-            # Derivar la clave y convertirla a hexadecimal
-            key_bytes = kdf.derive(timestamp_bytes)
-            master_key = key_bytes.hex()
+            # Derivar clave usando el install_timestamp como input
+            key = kdf.derive(install_timestamp.encode())
             
-            logger.debug("✅ Master key generada correctamente")
-            return master_key
-
+            # Convertir a hexadecimal
+            return key.hex()
+            
         except Exception as e:
-            logger.error(f"❌ Error generando master key: {e}")
+            logger.error(f"❌ Error generando clave para install_timestamp {install_timestamp}: {e}")
             return None
 
 # Instancia global

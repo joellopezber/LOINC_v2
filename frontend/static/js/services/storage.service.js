@@ -9,15 +9,12 @@ class StorageLogger {
 
     debug(key, ...args) { 
         if (key === 'openaiApiKey') {
-            console.debug(this.prefix, `${key}: [ENCRYPTED]`);
             return;
         }
-        console.debug(this.prefix, `${key}:`, ...args); 
     }
     
     info(key, ...args) { 
         if (key === 'openaiApiKey') {
-            console.info(this.prefix, `${key}: [ENCRYPTED]`);
             return;
         }
         console.info(this.prefix, `${key}:`, ...args); 
@@ -234,18 +231,15 @@ class StorageService {
 
     async initialize() {
         if (this.initialized) {
-            this.logger.debug('init', 'Ya inicializado');
             return true;
         }
         
         if (this.initializing) {
-            this.logger.debug('init', 'En progreso');
             return false;
         }
 
         try {
             this.initializing = true;
-            this.logger.group('Inicializando');
             
             // Inicializar servicios en paralelo
             const initPromises = [
@@ -262,16 +256,13 @@ class StorageService {
             // Sincronizar datos iniciales uno a uno
             const localData = await this._getLocalData();
             if (Object.keys(localData).length > 0) {
-                this.logger.debug('sync', `Sincronizando ${Object.keys(localData).length} valores`);
                 await this.sync.syncWithServer(localData);
             }
             
             this.initialized = true;
-            this.logger.info('init', '✓ Inicializado');
-            this.logger.groupEnd();
             return true;
         } catch (error) {
-            this.logger.error('init', error);
+            console.error('[Storage] Error:', error);
             return false;
         } finally {
             this.initializing = false;

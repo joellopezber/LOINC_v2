@@ -1,5 +1,4 @@
 from flask import Blueprint, request, jsonify, redirect, send_from_directory
-from services.on_demand.database_search_service import DatabaseSearchService
 import logging
 from flask_socketio import emit
 from datetime import datetime
@@ -31,45 +30,42 @@ def serve_test_js(filename):
 
 def get_search_service():
     """
-    Obtiene o crea el servicio de búsqueda de forma lazy
+    Obtiene el servicio de búsqueda de forma lazy
     
     Returns:
         DatabaseSearchService: Instancia del servicio
     """
     return service_locator.get('database_search')
 
-def init_socket_routes(socketio, search_service=None):
+_socket_routes_initialized = False
+
+def init_socket_routes(socketio):
     """Inicializa las rutas de WebSocket"""
-    logger.info("🚀 Inicializando rutas de WebSocket")
-
-    # Registrar handlers básicos
-    @socketio.on('connect')
-    def handle_connect():
-        logger.info(f"📡 Nueva conexión: {request.sid}")
-        emit('connect_response', {'status': 'connected', 'sid': request.sid})
-
-    @socketio.on('disconnect')
-    def handle_disconnect():
-        logger.info(f"👋 Desconexión: {request.sid}")
-
-    # Registrar handlers de servicios
+    global _socket_routes_initialized
+    
+    # Evitar inicialización duplicada
+    if _socket_routes_initialized:
+        return
+        
     try:
-        # Registrar OpenAI handler
-        from services.handlers.on_demand.openai_handlers import OpenAIHandlers
-        logger.info("🤖 Registrando handler de OpenAI")
-        OpenAIHandlers(socketio)  # Se auto-registra en el constructor
-        logger.info("✅ Handler de OpenAI registrado")
-
-        # Registrar Ontology handler
-        from services.handlers.on_demand.ontology_handlers import OntologyHandlers
-        logger.info("🔍 Registrando handler de Ontología")
-        OntologyHandlers.register(socketio)
-        logger.info("✅ Handler de Ontología registrado")
-
+        # Registrar handlers de OpenAI
+        openai_service = service_locator.get('openai')
+        if openai_service:
+            logger.debug("🤖 Registrando handler de OpenAI")
+            openai_service.register_handlers(socketio)
+        
+        # Registrar handlers de Ontología
+        ontology_service = service_locator.get('ontology')
+        if ontology_service:
+            logger.debug("🔍 Registrando handler de Ontología")
+            ontology_service.register_handlers(socketio)
+            
+        logger.info("✅ Rutas WebSocket registradas")
+        _socket_routes_initialized = True
+        
     except Exception as e:
-        logger.error(f"❌ Error registrando handlers: {str(e)}")
-
-    logger.info("✅ Rutas de WebSocket inicializadas")
+        logger.error(f"❌ Error inicializando rutas WebSocket: {e}")
+        raise
 
 # Rutas REST API
 @api_routes.route('/api/health')
@@ -82,7 +78,8 @@ def health_check():
             
         return jsonify({
             'status': 'ok',
-            'message': 'Server is running'
+            'message': 'Server is running',
+            'services': service_locator.get_service_status()
         })
     except Exception as e:
         logger.error(f"Error en health check: {e}")
@@ -105,9 +102,12 @@ def search_loinc():
             
         limit = int(request.args.get('limit', 10))
         search_service = get_search_service()
+        if not search_service:
+            return jsonify({'error': 'Search service not available'}), 503
+            
         results = search_service.search_loinc(query, user_id, limit)
-        
         return jsonify(results)
+        
     except Exception as e:
         logger.error(f"Error en búsqueda LOINC: {e}")
         return jsonify({'error': str(e)}), 500
@@ -125,12 +125,16 @@ def bulk_insert_loinc():
             return jsonify({'error': 'Invalid data format'}), 400
             
         search_service = get_search_service()
+        if not search_service:
+            return jsonify({'error': 'Search service not available'}), 503
+            
         status = search_service.bulk_insert_docs(docs, user_id)
         
         if status['success']:
             return jsonify(status)
         else:
-            return jsonify({'error': status['message']}), 500
+            return jsonify({'error': status.get('error', 'Unknown error')}), 500
+            
     except Exception as e:
         logger.error(f"Error en inserción masiva LOINC: {e}")
         return jsonify({'error': str(e)}), 500

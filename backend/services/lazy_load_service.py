@@ -40,6 +40,7 @@ class LazyLoadService:
         """Inicializa el servicio base"""
         self._initialized = False
         self._initialization_error = None
+        self._socketio = None
         
     @property
     def initialized(self) -> bool:
@@ -50,6 +51,18 @@ class LazyLoadService:
     def initialization_error(self) -> Optional[str]:
         """Devuelve el error de inicialización si existe"""
         return self._initialization_error
+
+    @property
+    def socketio(self):
+        """Obtiene la instancia de SocketIO"""
+        return self._socketio
+
+    @socketio.setter
+    def socketio(self, value):
+        """Establece la instancia de SocketIO y registra handlers si es necesario"""
+        self._socketio = value
+        if value and hasattr(self, 'register_handlers'):
+            self.register_handlers(value)
         
     def _set_initialized(self, success: bool, error: Optional[str] = None):
         """
@@ -65,4 +78,14 @@ class LazyLoadService:
         if success:
             logger.info(f"✅ {self.__class__.__name__} inicializado correctamente")
         else:
-            logger.error(f"❌ Error inicializando {self.__class__.__name__}: {error}") 
+            logger.error(f"❌ Error inicializando {self.__class__.__name__}: {error}")
+
+    def register_handlers(self, socketio) -> None:
+        """
+        Método base para registrar handlers de WebSocket.
+        Los servicios que necesiten handlers deben sobrescribir este método.
+        
+        Args:
+            socketio: Instancia de SocketIO
+        """
+        pass 

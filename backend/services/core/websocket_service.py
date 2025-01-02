@@ -1,5 +1,5 @@
 from flask_socketio import SocketIO, emit
-from typing import Dict, Any
+from typing import Dict, Any, Optional, Tuple
 import json
 import eventlet
 import logging
@@ -8,6 +8,7 @@ from .master_key_service import master_key_service
 from ..service_locator import service_locator
 from ..lazy_load_service import LazyLoadService, lazy_load
 import time
+from flask import request
 
 # Configurar logging
 logging.basicConfig(level=logging.DEBUG)
@@ -40,14 +41,49 @@ class WebSocketService(LazyLoadService):
         """Obtiene el StorageService de forma lazy"""
         return self._storage
 
+    def _emit_error(self, event: str, message: str, request_id: Optional[str] = None):
+        """Emite un error estandarizado"""
+        logger.error(f"❌ {event}: {message}")
+        emit(event, {
+            'status': 'error',
+            'message': message,
+            'request_id': request_id
+        })
+
+    def _validate_storage(self, event: str, request_id: Optional[str] = None) -> bool:
+        """Valida que el storage esté disponible"""
+        if not self.storage:
+            self._emit_error(event, "StorageService no disponible", request_id)
+            return False
+        return True
+
+    def _validate_data(self, data: Dict[str, Any], required_fields: list, 
+                      event: str) -> Tuple[bool, Optional[str], Optional[str]]:
+        """Valida los datos recibidos"""
+        if not isinstance(data, dict):
+            return False, "Datos inválidos", data.get('request_id')
+            
+        request_id = data.get('request_id')
+        missing = [f for f in required_fields if f not in data]
+        
+        if missing:
+            return False, f"Campos requeridos: {', '.join(missing)}", request_id
+            
+        return True, None, request_id
+
     def _setup_handlers(self):
         # Handlers básicos
         @self.socketio.on('connect')
-        def handle_connect(sid, environ):
+        def handle_connect():
+            """Handler de conexión WebSocket"""
+            sid = request.sid
+            environ = request.environ
             self.handle_connect(sid, environ)
 
         @self.socketio.on('disconnect')
-        def handle_disconnect(sid):
+        def handle_disconnect():
+            """Handler de desconexión WebSocket"""
+            sid = request.sid
             self.handle_disconnect(sid)
 
         # Handler de encryption (core)
@@ -105,35 +141,23 @@ class WebSocketService(LazyLoadService):
         @self.socketio.on('storage.get_all_for_user')
         def handle_get_all_for_user(data: Dict[str, Any]):
             logger.info("📥 Solicitud de storage.get_all_for_user recibida")
-            logger.debug(f"Datos recibidos: {data}")
             
-            install_id = data.get('install_id')
-            request_id = data.get('request_id')
-            
-            if not self.storage:
-                error_msg = "❌ StorageService no disponible"
-                logger.error(error_msg)
-                emit('storage.all_data', {
-                    'status': 'error',
-                    'message': error_msg,
-                    'request_id': request_id
-                })
+            # Validar datos
+            is_valid, error, request_id = self._validate_data(
+                data, ['install_id'], 'storage.all_data'
+            )
+            if not is_valid:
+                self._emit_error('storage.all_data', error, request_id)
                 return
-                
-            if not install_id:
-                error_msg = "install_id es requerido"
-                logger.error(error_msg)
-                emit('storage.all_data', {
-                    'status': 'error',
-                    'message': error_msg,
-                    'request_id': request_id
-                })
+
+            # Validar storage
+            if not self._validate_storage('storage.all_data', request_id):
                 return
 
             try:
+                install_id = data['install_id']
                 logger.debug(f"Obteniendo datos para install_id: {install_id}")
                 all_data = self.storage.get_all_for_user(install_id)
-                logger.debug(f"Datos obtenidos: {all_data}")
                 
                 emit('storage.all_data', {
                     'status': 'success',
@@ -143,65 +167,48 @@ class WebSocketService(LazyLoadService):
                 logger.info("✅ Datos enviados correctamente")
                 
             except Exception as e:
-                error_msg = f"Error en handle_get_all_for_user: {e}"
-                logger.error(error_msg)
-                emit('storage.all_data', {
-                    'status': 'error',
-                    'message': str(e),
-                    'request_id': request_id
-                })
+                self._emit_error('storage.all_data', str(e), request_id)
         
         @self.socketio.on('storage.set_value')
         def handle_set_value(data: Dict[str, Any]):
-            key = data.get('key')
-            value = data.get('value')
-            install_id = data.get('install_id')
-            request_id = data.get('request_id')
+            logger.info("📥 Solicitud de storage.set_value recibida")
             
-            if not self.storage:
-                error_msg = "❌ StorageService no disponible"
-                logger.error(error_msg)
-                emit('storage.value_set', {
-                    'status': 'error',
-                    'message': error_msg,
-                    'request_id': request_id
-                })
+            # Validar datos
+            is_valid, error, request_id = self._validate_data(
+                data, ['key', 'value', 'install_id'], 'storage.value_set'
+            )
+            if not is_valid:
+                self._emit_error('storage.value_set', error, request_id)
                 return
-                
-            if not all([key, value, install_id]):
-                error_msg = "Key, value e install_id son requeridos"
-                logger.error(error_msg)
-                emit('storage.value_set', {
-                    'status': 'error',
-                    'message': error_msg,
-                    'request_id': request_id
-                })
+
+            # Validar storage
+            if not self._validate_storage('storage.value_set', request_id):
                 return
 
             try:
+                key = data['key']
+                value = data['value']
+                install_id = data['install_id']
+                
+                logger.debug(f"Guardando valor - Key: {key}, InstallID: {install_id}")
+                
                 if self.storage.set_value(key, value, install_id):
                     emit('storage.value_set', {
                         'status': 'success',
                         'key': key,
                         'request_id': request_id
                     })
+                    # Notificar a otros clientes
                     emit('storage.value_updated', {
                         'key': key,
                         'value': value
                     }, broadcast=True, include_self=False)
+                    logger.info(f"✅ Valor guardado y notificado: {key}")
                 else:
-                    emit('storage.value_set', {
-                        'status': 'error',
-                        'message': 'Error setting value',
-                        'request_id': request_id
-                    })
+                    self._emit_error('storage.value_set', 'Error guardando valor', request_id)
+                    
             except Exception as e:
-                logger.error(f"Error en handle_set_value: {e}")
-                emit('storage.value_set', {
-                    'status': 'error',
-                    'message': str(e),
-                    'request_id': request_id
-                })
+                self._emit_error('storage.value_set', str(e), request_id)
                 
         @self.socketio.on('storage.get_value')
         def handle_get_value(data: Dict[str, Any]):
@@ -246,11 +253,9 @@ class WebSocketService(LazyLoadService):
 
     def handle_connect(self, sid, environ):
         """Maneja nueva conexión WebSocket"""
-        timestamp = time.strftime('%Y-%m-%d %H:%M:%S')
         client_info = {
             'sid': sid,
             'ip': environ.get('REMOTE_ADDR', 'unknown'),
-            'user_agent': environ.get('HTTP_USER_AGENT', 'unknown'),
             'connected_at': time.time(),
             'last_activity': time.time()
         }
@@ -258,11 +263,7 @@ class WebSocketService(LazyLoadService):
         
         self.logger.info(
             f"\n{'='*50}\n"
-            f"📡 Nueva conexión WebSocket\n"
-            f"🔍 ID: {sid}\n"
-            f"⏰ Timestamp: {timestamp}\n"
-            f"🌐 IP: {client_info['ip']}\n"
-            f"📱 User Agent: {client_info['user_agent']}\n"
+            f"📡 Nueva conexión WebSocket  -  ID: {sid} - IP: {client_info['ip']}\n"
             f"👥 Conexiones activas: {len(self.active_connections)}\n"
             f"{'='*50}"
         )
@@ -271,33 +272,20 @@ class WebSocketService(LazyLoadService):
         """Maneja desconexión WebSocket"""
         if sid in self.active_connections:
             client = self.active_connections[sid]
-            duration = time.time() - client['connected_at']
-            timestamp = time.strftime('%Y-%m-%d %H:%M:%S')
-            
             self.logger.info(
                 f"\n{'='*50}\n"
-                f"👋 Desconexión WebSocket\n"
-                f"🔍 ID: {sid}\n"
-                f"⏰ Timestamp: {timestamp}\n"
-                f"⏱️ Duración: {int(duration)}s\n"
-                f"🌐 IP: {client['ip']}\n"
-                f"👥 Conexiones restantes: {len(self.active_connections) - 1}\n"
+                f"👋 Desconexión WebSocket  -  ID: {sid} - IP: {client['ip']}\n"
+                f"👥 Conexiones activas: {len(self.active_connections) - 1}\n"
                 f"{'='*50}"
             )
-            
             del self.active_connections[sid]
 
     def handle_error(self, sid, error):
         """Maneja errores de WebSocket"""
-        timestamp = time.strftime('%Y-%m-%d %H:%M:%S')
         client = self.active_connections.get(sid, {})
-        
         self.logger.error(
             f"\n{'='*50}\n"
-            f"❌ Error en WebSocket\n"
-            f"🔍 ID: {sid}\n"
-            f"⏰ Timestamp: {timestamp}\n"
-            f"🌐 IP: {client.get('ip', 'unknown')}\n"
+            f"❌ Error WebSocket  -  ID: {sid} - IP: {client.get('ip', 'unknown')}\n"
             f"💥 Error: {str(error)}\n"
             f"{'='*50}"
         )

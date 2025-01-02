@@ -1,4 +1,4 @@
-from typing import Optional, Any, Dict
+from typing import Optional, Any, Dict, Tuple
 import logging
 import time
 from .encryption_service import encryption_service
@@ -22,7 +22,7 @@ class StorageService(LazyLoadService):
             return
             
         super().__init__()
-        logger.info("💾 Inicializando Storage service...")
+        logger.debug("💾 Inicializando Storage service")
         
         try:
             # Almacenar datos por usuario usando installId como clave
@@ -73,34 +73,48 @@ class StorageService(LazyLoadService):
             logger.warning(f"⚠️ Eliminando valor de tipo no permitido: {type(value).__name__}")
             return None
 
+    def _validate_value_size(self, value: Any) -> Tuple[bool, str]:
+        """Valida el tamaño del valor"""
+        try:
+            size = len(json.dumps(value).encode('utf-8'))
+            if size > self.MAX_VALUE_SIZE:
+                return False, f"Valor demasiado grande: {size} bytes (máx {self.MAX_VALUE_SIZE})"
+            return True, ""
+        except Exception as e:
+            return False, f"Error validando tamaño: {str(e)}"
+
     def set_value(self, key: str, value: Any, install_id: str) -> bool:
         """Establece un valor en el storage para un usuario específico"""
         try:
-            # Validar que la key sea permitida
-            allowed_keys = ['searchConfig', 'openaiApiKey', 'installTimestamp', 'ontologyResults']
-            if key not in allowed_keys:
-                logger.error(f"❌ Key no permitida: {key}")
+            # Validación básica de seguridad
+            if not isinstance(key, str):
+                logger.error(f"❌ Key debe ser string: {type(key)}")
                 return False
+
+            if not install_id:
+                logger.error("❌ install_id es requerido")
+                return False
+
+            # Debug log
+            logger.debug(f"📝 Intentando guardar - Key: {key}, InstallID: {install_id}")
+            logger.debug(f"📦 Valor a guardar: {value}")
 
             # Limpiar valor de tipos no permitidos
             sanitized_value = self._sanitize_value(value)
-            
-            # Validar estructura del valor
-            validation_result = self._validate_value(key, sanitized_value)
-            if not validation_result['valid']:
-                logger.error(f"❌ {key}: {validation_result['error']}")
-                return False
+            if sanitized_value != value:
+                logger.warning(f"⚠️ Valor sanitizado para key {key}")
+                logger.debug(f"Original: {value}")
+                logger.debug(f"Sanitizado: {sanitized_value}")
 
             # Obtener almacenamiento del usuario
             user_storage = self._get_user_storage(install_id)
 
             # Log del valor si ha cambiado
             if self._has_value_changed(key, sanitized_value, install_id):
-                size = self._get_value_size(sanitized_value)
                 if key == 'openaiApiKey':
-                    logger.info(f"📥 {key}: [ENCRYPTED] ({size} bytes)")
+                    logger.info(f"📥 {key}: [ENCRYPTED]")
                 else:
-                    logger.info(f"📥 {key}: {self._format_value_for_log(key, sanitized_value)} ({size} bytes)")
+                    logger.info(f"📥 {key}: {self._format_value_for_log(key, sanitized_value)}")
                 self.last_values[key] = sanitized_value
 
             # Actualizar valor
@@ -108,11 +122,11 @@ class StorageService(LazyLoadService):
 
             # Emitir actualización
             self.emit_update(key, sanitized_value, install_id)
-                
+            
             return True
 
         except Exception as e:
-            logger.error(f"❌ {key}: {str(e)}")
+            logger.error(f"❌ Error guardando {key}: {str(e)}")
             return False
 
     def _validate_value(self, key: str, value: Any) -> Dict[str, Any]:
@@ -174,16 +188,14 @@ class StorageService(LazyLoadService):
             elif key == 'openaiApiKey':
                 return "********"
             elif key == 'searchConfig':
-                # Mostrar resumen de la configuración
+                # Mostrar solo el número total de parámetros
                 if isinstance(value, dict):
-                    search = value.get('search', {})
-                    return (
-                        f"Modo ontología: {search.get('ontologyMode', 'N/A')}\n"
-                        f"Modo DB: {search.get('dbMode', 'N/A')}\n"
-                        f"OpenAI config: {len(search.get('openai', {}))} opciones\n"
-                        f"SQL config: {len(value.get('sql', {}))} opciones\n"
-                        f"Elastic config: {len(value.get('elastic', {}))} opciones"
+                    total_params = (
+                        len(value.get('search', {}).get('openai', {})) +
+                        len(value.get('sql', {})) +
+                        len(value.get('elastic', {}))
                     )
+                    return f"Parámetros actualizados: {total_params}"
                 return str(value)
             else:
                 return json.dumps(value, indent=2)
@@ -359,3 +371,6 @@ class StorageService(LazyLoadService):
         except Exception as e:
             logger.error(f"❌ Error procesando test OpenAI: {e}")
             return None 
+
+# Crear instancia global
+storage_service = StorageService() 

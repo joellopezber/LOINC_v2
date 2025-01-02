@@ -17,7 +17,7 @@ export class ApiKeyManager {
             }
             return result;
         } catch (error) {
-            console.error('[ApiKeyManager] Error al guardar API key:', error);
+            console.error(`[ApiKey] Error guardando ${provider}:`, error);
             return { success: false, message: error.message };
         }
     }
@@ -56,7 +56,7 @@ export class ApiKeyManager {
                     decrypted: false
                 };
             } catch (error) {
-                console.error(`[ApiKeyManager] Error al cargar API key de ${provider}:`, error);
+                console.error(`[ApiKey] Error cargando ${provider}:`, error);
                 notifications.error(`Error al cargar API key de ${provider}`);
             }
         }
@@ -66,38 +66,27 @@ export class ApiKeyManager {
 
     async decryptApiKey(provider) {
         try {
-            console.debug(`[ApiKeyManager] Iniciando proceso de desencriptación para ${provider}...`);
-            
-            // 1. Verificar si ya tenemos la key desencriptada en caché
             const cachedKey = this.decryptedKeys.get(provider);
             if (cachedKey) {
-                console.debug(`[ApiKeyManager] Usando key desencriptada en caché para ${provider}`);
                 return cachedKey;
             }
 
-            // 2. Obtener key encriptada
             const encryptedKey = await apiKeyService.getEncryptedKey(provider);
             if (!encryptedKey) {
-                console.debug(`[ApiKeyManager] No hay key guardada para ${provider}`);
                 return null;
             }
 
-            // 3. Desencriptar key
-            console.debug(`[ApiKeyManager] Solicitando desencriptación para ${provider}...`);
             const decryptedKey = await apiKeyService.decryptKey(provider, encryptedKey);
             
             if (!decryptedKey) {
                 throw new Error('No se pudo desencriptar la API key');
             }
 
-            // 4. Guardar en caché
             this.decryptedKeys.set(provider, decryptedKey);
-            
-            console.debug(`[ApiKeyManager] Key desencriptada correctamente para ${provider}`);
             return decryptedKey;
 
         } catch (error) {
-            console.error(`[ApiKeyManager] Error desencriptando key de ${provider}:`, error);
+            console.error(`[ApiKey] Error desencriptando ${provider}:`, error);
             notifications.error(`Error desencriptando API key de ${provider}`);
             return null;
         }

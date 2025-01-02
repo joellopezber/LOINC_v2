@@ -36,87 +36,64 @@ class EncryptionService {
     }
 
     async _migrateFromLocalStorage() {
-        // Migración suave: si existe una masterkey en localStorage, la usaremos una última vez
         const oldKey = localStorage.getItem('masterKey');
         if (oldKey) {
-            console.debug('[Encryption] Encontrada master key antigua, se migrará en el próximo inicio');
             this._temporaryKey = oldKey;
-            // No borramos inmediatamente para mantener compatibilidad durante la migración
         }
     }
 
     async initialize() {
         const startTime = performance.now();
         try {
-            // Si ya está inicializado o se intentó inicializar, retornar
             if (this.initialized || this.initializationAttempted) {
-                console.debug('[Encryption] Ya inicializado o intentado');
                 return;
             }
 
-            // Si ya hay una inicialización en progreso, esperar
             if (this.masterKeyPromise) {
-                console.debug('[Encryption] Esperando inicialización en progreso...');
                 await this.masterKeyPromise;
                 return;
             }
 
             this.initializationAttempted = true;
 
-            // Crear una promesa para la inicialización
             this.masterKeyPromise = new Promise(async (resolve, reject) => {
-                try {
-                    console.log('[Encryption] Inicializando servicio...');
-                    
-                    // Esperar a que el WebSocket esté disponible
-                    const wsStart = performance.now();
+                try { 
                     await this._waitForWebSocket();
-                    console.debug(`[Encryption] WebSocket listo (${Math.round(performance.now() - wsStart)}ms)`);
                     
-                    // Obtener la master key del backend
                     let masterKey = null;
                     if (websocketService.isConnected()) {
-                        // Obtener el installTimestamp
                         const installTimestamp = localStorage.getItem('installTimestamp');
                         if (!installTimestamp) {
-                            console.warn('[Encryption] No hay installTimestamp disponible');
                             reject(new Error('No hay installTimestamp disponible'));
                             return;
                         }
 
-                        console.log('[Encryption] Solicitando master key al servidor...');
-                        const requestStart = performance.now();
                         try {
                             const response = await websocketService.sendRequest('encryption.get_master_key', {
                                 installTimestamp
                             });
-                            console.debug(`[Encryption] Respuesta recibida (${Math.round(performance.now() - requestStart)}ms)`);
                             
                             if (response.status === 'success' && response.key) {
-                                console.log('[Encryption] Master key recibida del servidor');
                                 masterKey = response.key;
+                                console.log('🔑 MasterKey recibida del servidor');
                             } else {
-                                console.error('[Encryption] Error recibiendo master key:', response.message);
+                                console.error('[Encryption] Error:', response.message);
                             }
                         } catch (error) {
-                            console.error('[Encryption] Error solicitando master key:', error);
+                            console.error('[Encryption] Error:', error);
                         }
                     }
 
-                    // Si no se pudo obtener del backend, intentar usar la key temporal de migración
                     if (!masterKey && this._temporaryKey) {
-                        console.log('[Encryption] Usando master key temporal durante migración');
                         masterKey = this._temporaryKey;
-                        delete this._temporaryKey; // Usar solo una vez
+                        console.log('🔑 Usando MasterKey temporal');
+                        delete this._temporaryKey;
                     }
 
-                    // Si no hay key disponible, error
                     if (!masterKey) {
-                        throw new Error('No se pudo obtener la master key del servidor');
+                        throw new Error('No se pudo obtener la master key');
                     }
 
-                    // Importar la master key
-                    const importStart = performance.now();
                     const keyBuffer = new Uint8Array(masterKey.match(/.{2}/g).map(byte => parseInt(byte, 16)));
                     this.masterKey = await crypto.subtle.importKey(
                         'raw',
@@ -125,21 +102,17 @@ class EncryptionService {
                         false,
                         ['deriveKey']
                     );
-                    console.debug(`[Encryption] Master key importada (${Math.round(performance.now() - importStart)}ms)`);
                     
                     this.initialized = true;
-                    const totalTime = Math.round(performance.now() - startTime);
-                    console.log(`[Encryption] Servicio inicializado correctamente (${totalTime}ms)`);
+                    console.log('✅ EncryptionService inicializado');
 
-                    // Si la inicialización fue exitosa y usamos la key temporal, limpiar localStorage
                     if (localStorage.getItem('masterKey')) {
-                        console.debug('[Encryption] Limpiando master key antigua del localStorage');
                         localStorage.removeItem('masterKey');
                     }
 
                     resolve();
                 } catch (error) {
-                    console.error('[Encryption] Error crítico inicializando el servicio:', error);
+                    console.error('[Encryption] Error crítico:', error);
                     reject(error);
                 } finally {
                     this.masterKeyPromise = null;
@@ -148,7 +121,7 @@ class EncryptionService {
 
             await this.masterKeyPromise;
         } catch (error) {
-            console.error('[Encryption] Error en initialize:', error);
+            console.error('[Encryption] Error:', error);
             throw error;
         }
     }
@@ -212,13 +185,12 @@ class EncryptionService {
 
             return this.arrayBufferToBase64(result.buffer);
         } catch (error) {
-            console.error('[Encryption] Error crítico en encriptación:', error);
+            console.error('[Encryption] Error encriptando:', error);
             return null;
         }
     }
 
     async decrypt(encryptedData) {
-        const startTime = performance.now();
         try {
             const data = new Uint8Array(this.base64ToArrayBuffer(encryptedData));
             
@@ -226,24 +198,18 @@ class EncryptionService {
             const iv = data.slice(16, 28);
             const content = data.slice(28);
 
-            const deriveStart = performance.now();
             const key = await this.deriveKey(salt);
-            console.debug(`[Encryption] Key derivada (${Math.round(performance.now() - deriveStart)}ms)`);
-
-            const decryptStart = performance.now();
             const decryptedContent = await crypto.subtle.decrypt(
                 { name: 'AES-GCM', iv },
                 key,
                 content
             );
-            console.debug(`[Encryption] Contenido desencriptado (${Math.round(performance.now() - decryptStart)}ms)`);
 
             const result = new TextDecoder().decode(decryptedContent);
-            const totalTime = Math.round(performance.now() - startTime);
-            console.debug(`[Encryption] Desencriptación completa (${totalTime}ms)`);
+            console.log('🔓 Datos desencriptados correctamente');
             return result;
         } catch (error) {
-            console.error('[Encryption] Error crítico en desencriptación:', error);
+            console.error('[Encryption] Error desencriptando:', error);
             return null;
         }
     }
