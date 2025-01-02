@@ -1,15 +1,33 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, redirect, send_from_directory
 from services.on_demand.database_search_service import DatabaseSearchService
 import logging
 from flask_socketio import emit
 from datetime import datetime
 from services.service_locator import service_locator
+import os
 
 # Configurar logging
 logger = logging.getLogger(__name__)
 
 # Crear Blueprint para rutas API
 api_routes = Blueprint('api_routes', __name__)
+
+@api_routes.route('/tests')
+def redirect_tests():
+    """Redirecciona /tests a /tests/index.html"""
+    return redirect('/tests/index.html')
+
+@api_routes.route('/manual/css/<path:filename>')
+def serve_test_css(filename):
+    """Sirve archivos CSS de test"""
+    test_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'frontend', 'tests', 'manual', 'css')
+    return send_from_directory(test_dir, filename)
+
+@api_routes.route('/manual/js/<path:filename>')
+def serve_test_js(filename):
+    """Sirve archivos JS de test"""
+    test_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'frontend', 'tests', 'manual', 'js')
+    return send_from_directory(test_dir, filename)
 
 def get_search_service():
     """
@@ -18,12 +36,7 @@ def get_search_service():
     Returns:
         DatabaseSearchService: Instancia del servicio
     """
-    search_service = service_locator.get('database_search')
-    if not search_service:
-        logger.info("🔄 Creando nueva instancia de DatabaseSearchService")
-        search_service = DatabaseSearchService()
-        service_locator.register('database_search', search_service)
-    return search_service
+    return service_locator.get('database_search')
 
 def init_socket_routes(socketio, search_service=None):
     """Inicializa las rutas de WebSocket"""
@@ -80,17 +93,18 @@ def health_check():
 
 @api_routes.route('/api/loinc/search', methods=['GET'])
 def search_loinc():
-    """Endpoint para buscar en la documentación LOINC"""
+    """Endpoint para búsqueda LOINC"""
     try:
         user_id = request.headers.get('X-User-Id')
         if not user_id:
             return jsonify({'error': 'X-User-Id header is required'}), 400
             
-        query = request.args.get('q', '')
+        query = request.args.get('q')
         if not query:
             return jsonify({'error': 'Query parameter "q" is required'}), 400
             
         limit = int(request.args.get('limit', 10))
+        search_service = get_search_service()
         results = search_service.search_loinc(query, user_id, limit)
         
         return jsonify(results)
@@ -110,18 +124,13 @@ def bulk_insert_loinc():
         if not docs or not isinstance(docs, list):
             return jsonify({'error': 'Invalid data format'}), 400
             
+        search_service = get_search_service()
         status = search_service.bulk_insert_docs(docs, user_id)
         
         if status['success']:
-            return jsonify({
-                'message': 'Documents processed successfully',
-                'status': status
-            })
+            return jsonify(status)
         else:
-            return jsonify({
-                'error': 'Failed to insert documents',
-                'status': status
-            }), 500
+            return jsonify({'error': status['message']}), 500
     except Exception as e:
-        logger.error(f"Error en inserción LOINC: {e}")
+        logger.error(f"Error en inserción masiva LOINC: {e}")
         return jsonify({'error': str(e)}), 500

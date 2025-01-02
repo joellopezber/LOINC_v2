@@ -3,14 +3,41 @@ import { websocketService } from './websocket.service.js';
 
 // Clase para manejar el logging interno del servicio
 class StorageLogger {
-    constructor(prefix = '[StorageService]') {
+    constructor(prefix = '[Storage]') {
         this.prefix = prefix;
     }
 
-    debug(...args) { console.debug(this.prefix, ...args); }
-    info(...args) { console.info(this.prefix, ...args); }
-    warn(...args) { console.warn(this.prefix, ...args); }
-    error(...args) { console.error(this.prefix, ...args); }
+    debug(key, ...args) { 
+        if (key === 'openaiApiKey') {
+            console.debug(this.prefix, `${key}: [ENCRYPTED]`);
+            return;
+        }
+        console.debug(this.prefix, `${key}:`, ...args); 
+    }
+    
+    info(key, ...args) { 
+        if (key === 'openaiApiKey') {
+            console.info(this.prefix, `${key}: [ENCRYPTED]`);
+            return;
+        }
+        console.info(this.prefix, `${key}:`, ...args); 
+    }
+    
+    warn(key, ...args) { 
+        console.warn(this.prefix, `${key}:`, ...args); 
+    }
+    
+    error(key, ...args) { 
+        console.error(this.prefix, `${key}:`, ...args); 
+    }
+
+    group(title) {
+        console.group(this.prefix, title);
+    }
+
+    groupEnd() {
+        console.groupEnd();
+    }
 }
 
 // Clase para manejar la caché interna
@@ -90,7 +117,7 @@ class StorageValidator {
             'installTimestamp': {
                 sync: true,
                 cache: false,
-                validate: (value) => typeof value === 'string'
+                validate: (value) => typeof value === 'string' || typeof value === 'number'
             }
         };
     }
@@ -157,7 +184,7 @@ class StorageSync {
                 } catch (error) {
                     // Si falla la sincronización, marcar como pendiente
                     this.pendingSync.add(key);
-                    this.logger.warn(`Error sincronizando ${key}, se reintentará más tarde:`, error);
+                    this.logger.warn(key, 'Error sincronizando, reintentará más tarde');
                 }
             }
 
@@ -169,7 +196,7 @@ class StorageSync {
 
             return true;
         } catch (error) {
-            this.logger.error('Error general sincronizando:', error);
+            this.logger.error('sync', error);
             // Marcar todos los datos como pendientes
             Object.keys(data).forEach(key => this.pendingSync.add(key));
             return false;
@@ -207,49 +234,59 @@ class StorageService {
 
     async initialize() {
         if (this.initialized) {
-            this.logger.debug('Ya inicializado, omitiendo...');
+            this.logger.debug('init', 'Ya inicializado');
             return true;
         }
         
         if (this.initializing) {
-            this.logger.debug('Inicialización en progreso...');
+            this.logger.debug('init', 'En progreso');
             return false;
         }
 
         try {
             this.initializing = true;
-            this.logger.debug('Iniciando servicio de almacenamiento...');
+            this.logger.group('Inicializando');
             
-            // 1. Verificar storage base
-            if (!storage.initialized) {
-                await storage.initialize();
-                this.logger.debug('Storage base inicializado');
-            } else {
-                this.logger.debug('Storage base ya estaba inicializado');
+            // Inicializar servicios en paralelo
+            const initPromises = [
+                !storage.initialized ? storage.initialize() : Promise.resolve(true),
+                !websocketService.isConnected() ? websocketService.connect() : Promise.resolve(true)
+            ];
+
+            const [storageOk, websocketOk] = await Promise.all(initPromises);
+            
+            if (!storageOk || !websocketOk) {
+                throw new Error('Error inicializando servicios base');
             }
             
-            // 2. Verificar WebSocket
-            if (!websocketService.isConnected()) {
-                await websocketService.connect();
-                this.logger.debug('WebSocket conectado');
-            } else {
-                this.logger.debug('WebSocket ya estaba conectado');
-            }
-            
-            // 3. Sincronizar datos iniciales
+            // Sincronizar datos iniciales uno a uno
             const localData = await this._getLocalData();
-            await this.sync.syncWithServer(localData);
-            this.logger.debug('Datos sincronizados');
+            if (Object.keys(localData).length > 0) {
+                this.logger.debug('sync', `Sincronizando ${Object.keys(localData).length} valores`);
+                await this.sync.syncWithServer(localData);
+            }
             
             this.initialized = true;
-            this.logger.info('Servicio de almacenamiento inicializado correctamente');
+            this.logger.info('init', '✓ Inicializado');
+            this.logger.groupEnd();
             return true;
         } catch (error) {
-            this.logger.error('Error en inicialización:', error);
+            this.logger.error('init', error);
             return false;
         } finally {
             this.initializing = false;
         }
+    }
+
+    async _getLocalData() {
+        const data = {};
+        for (const key of Object.keys(this.validator.types)) {
+            const value = await this.get(key);
+            if (value !== null) {
+                data[key] = value;
+            }
+        }
+        return data;
     }
 
     async get(key) {
@@ -291,17 +328,6 @@ class StorageService {
         }
 
         return true;
-    }
-
-    async _getLocalData() {
-        const data = {};
-        for (const key of Object.keys(this.validator.types)) {
-            const value = await this.get(key);
-            if (value !== null) {
-                data[key] = value;
-            }
-        }
-        return data;
     }
 
     async _handleWebSocketConnect() {

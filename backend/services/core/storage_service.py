@@ -61,68 +61,90 @@ class StorageService(LazyLoadService):
         logger.debug(f"🗄️ [Storage] Estado actual: {json.dumps(self.storage_data, indent=2)}")
         return value
 
+    def _sanitize_value(self, value: Any) -> Any:
+        """Limpia el valor eliminando tipos de datos no permitidos"""
+        if isinstance(value, dict):
+            return {k: self._sanitize_value(v) for k, v in value.items()}
+        elif isinstance(value, list):
+            return [self._sanitize_value(item) for item in value]
+        elif isinstance(value, (str, int, float, bool, type(None))):
+            return value
+        else:
+            logger.warning(f"⚠️ Eliminando valor de tipo no permitido: {type(value).__name__}")
+            return None
+
     def set_value(self, key: str, value: Any, install_id: str) -> bool:
         """Establece un valor en el storage para un usuario específico"""
         try:
-            timestamp = time.strftime('%Y-%m-%d %H:%M:%S')
-            logger.debug(f"\n{'='*50}")
-            logger.debug(f"⏱️ [{timestamp}] Iniciando operación para {key} (Usuario: {install_id})")
-            logger.debug(f"{'='*50}")
-
             # Validar que la key sea permitida
             allowed_keys = ['searchConfig', 'openaiApiKey', 'installTimestamp', 'ontologyResults']
             if key not in allowed_keys:
-                logger.error(f"❌ [Storage] Key no permitida: {key}")
+                logger.error(f"❌ Key no permitida: {key}")
                 return False
 
+            # Limpiar valor de tipos no permitidos
+            sanitized_value = self._sanitize_value(value)
+            
             # Validar estructura del valor
-            validation_result = self._validate_value(key, value)
+            validation_result = self._validate_value(key, sanitized_value)
             if not validation_result['valid']:
-                logger.error(f"❌ [Storage:{key}] Error de validación: {validation_result['error']}")
+                logger.error(f"❌ {key}: {validation_result['error']}")
                 return False
 
             # Obtener almacenamiento del usuario
             user_storage = self._get_user_storage(install_id)
 
             # Log del valor si ha cambiado
-            if self._has_value_changed(key, value, install_id):
-                log_value = self._format_value_for_log(key, value)
-                size = self._get_value_size(value)
-                logger.info(f"📥 [Storage:{key}] Nuevo valor recibido para usuario {install_id}")
-                logger.info(f"📊 Tamaño: {size} bytes")
-                logger.info(f"📝 Contenido:\n{log_value}")
-                self.last_values[key] = value
+            if self._has_value_changed(key, sanitized_value, install_id):
+                size = self._get_value_size(sanitized_value)
+                if key == 'openaiApiKey':
+                    logger.info(f"📥 {key}: [ENCRYPTED] ({size} bytes)")
+                else:
+                    logger.info(f"📥 {key}: {self._format_value_for_log(key, sanitized_value)} ({size} bytes)")
+                self.last_values[key] = sanitized_value
 
             # Actualizar valor
-            user_storage[key] = value
+            user_storage[key] = sanitized_value
 
-            logger.info(f"💾 [Storage:{key}] Almacenado correctamente en {timestamp}")
-            
             # Emitir actualización
-            self.emit_update(key, value, install_id)
+            self.emit_update(key, sanitized_value, install_id)
                 
-            logger.debug(f"{'='*50}\n")
-            
             return True
 
         except Exception as e:
-            logger.error(f"❌ [Storage:{key}] Error: {str(e)}")
+            logger.error(f"❌ {key}: {str(e)}")
             return False
 
     def _validate_value(self, key: str, value: Any) -> Dict[str, Any]:
         """Valida la estructura del valor según el tipo"""
         try:
-            if key == 'ontologyResults':
-                if not isinstance(value, dict):
-                    return {'valid': False, 'error': 'Debe ser un diccionario'}
-                for term, data in value.items():
-                    if not isinstance(data, dict):
-                        return {'valid': False, 'error': f'Datos inválidos para término {term}'}
-                    required_fields = ['data', 'timestamp', 'searchCount']
-                    missing_fields = [f for f in required_fields if f not in data]
-                    if missing_fields:
-                        return {'valid': False, 'error': f'Campos faltantes: {missing_fields}'}
-            return {'valid': True, 'error': None}
+            # Validar tipos básicos permitidos
+            if isinstance(value, (dict, list, str, int, float, bool, type(None))):
+                # Validación específica por key
+                if key == 'ontologyResults':
+                    if not isinstance(value, dict):
+                        return {'valid': False, 'error': 'Debe ser un diccionario'}
+                    for term, data in value.items():
+                        if not isinstance(data, dict):
+                            return {'valid': False, 'error': f'Datos inválidos para término {term}'}
+                        required_fields = ['data', 'timestamp', 'searchCount']
+                        missing_fields = [f for f in required_fields if f not in data]
+                        if missing_fields:
+                            return {'valid': False, 'error': f'Campos faltantes: {missing_fields}'}
+                elif key == 'openaiApiKey':
+                    if not isinstance(value, str):
+                        return {'valid': False, 'error': 'API Key debe ser una cadena de texto'}
+                elif key == 'searchConfig':
+                    if not isinstance(value, dict):
+                        return {'valid': False, 'error': 'Configuración debe ser un diccionario'}
+                elif key == 'installTimestamp':
+                    if not isinstance(value, (int, str)):
+                        return {'valid': False, 'error': 'Timestamp debe ser un número o cadena'}
+                
+                return {'valid': True, 'error': None}
+            else:
+                return {'valid': False, 'error': f'Tipo de dato no permitido: {type(value).__name__}'}
+            
         except Exception as e:
             return {'valid': False, 'error': str(e)}
 
@@ -210,7 +232,7 @@ class StorageService(LazyLoadService):
                 return None
 
             # 3. Obtener OpenAI service
-            from .openai_service import openai_service
+            from ..on_demand.openai_service import openai_service
             if not openai_service:
                 logger.error("❌ OpenAI service no disponible")
                 return None
@@ -266,15 +288,14 @@ class StorageService(LazyLoadService):
         """Emite una actualización a través de WebSocket"""
         try:
             if self.websocket and hasattr(self.websocket, 'socketio'):
-                # Emitir solo al usuario correcto usando su installId
                 self.websocket.socketio.emit(
                     'storage.value_updated',
                     {'key': key, 'value': value},
-                    room=install_id  # Usar installId como room
+                    room=install_id
                 )
-                logger.debug(f"📡 [Storage:{key}] Actualización emitida para usuario {install_id}")
+                logger.debug(f"📡 {key}: actualizado")
         except Exception as e:
-            logger.error(f"❌ [Storage:{key}] Error en emisión: {str(e)}")
+            logger.error(f"❌ {key}: error en emisión: {str(e)}")
 
     def get_all_for_user(self, install_id: str) -> Dict[str, Any]:
         """Obtiene todos los valores almacenados para un usuario específico"""
@@ -296,7 +317,7 @@ class StorageService(LazyLoadService):
                 return None
 
             # 3. Obtener OpenAI service de forma lazy
-            from .openai_service import openai_service
+            from ..on_demand.openai_service import openai_service
             if not openai_service:
                 logger.error("❌ No se pudo obtener OpenAI service")
                 return None

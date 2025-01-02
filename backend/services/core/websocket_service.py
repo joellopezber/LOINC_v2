@@ -54,14 +54,11 @@ class WebSocketService(LazyLoadService):
         @self.socketio.on('encryption.get_master_key')
         def handle_get_master_key(data):
             try:
-                logger.info("🔐 Solicitud de master key recibida")
-                
                 if not isinstance(data, dict):
-                    error_msg = "❌ Datos recibidos no son un diccionario válido"
-                    logger.error(error_msg)
+                    logger.error("❌ master_key: datos inválidos")
                     emit('encryption.master_key', {
                         'status': 'error', 
-                        'message': error_msg,
+                        'message': 'Datos inválidos',
                         'request_id': data.get('request_id')
                     })
                     return
@@ -70,11 +67,10 @@ class WebSocketService(LazyLoadService):
                 request_id = data.get('request_id')
                 
                 if not install_timestamp:
-                    error_msg = "❌ No se proporcionó installTimestamp"
-                    logger.error(error_msg)
+                    logger.error("❌ master_key: falta installTimestamp")
                     emit('encryption.master_key', {
                         'status': 'error', 
-                        'message': error_msg,
+                        'message': 'installTimestamp requerido',
                         'request_id': request_id
                     })
                     return
@@ -83,16 +79,15 @@ class WebSocketService(LazyLoadService):
                 master_key = encryption_service.get_key_for_install(install_timestamp)
                 
                 if not master_key:
-                    error_msg = "❌ Error generando master key"
-                    logger.error(error_msg)
+                    logger.error("❌ master_key: error generando key")
                     emit('encryption.master_key', {
                         'status': 'error', 
-                        'message': error_msg,
+                        'message': 'Error generando key',
                         'request_id': request_id
                     })
                     return
 
-                logger.info("✅ Master key generada correctamente")
+                logger.debug("✓ master_key: enviada")
                 emit('encryption.master_key', {
                     'status': 'success',
                     'key': master_key,
@@ -100,9 +95,11 @@ class WebSocketService(LazyLoadService):
                 })
 
             except Exception as e:
-                error_msg = f"❌ Error obteniendo master key: {str(e)}"
-                logger.error(error_msg)
-                emit('encryption.master_key', {'status': 'error', 'message': error_msg})
+                logger.error(f"❌ master_key: {str(e)}")
+                emit('encryption.master_key', {
+                    'status': 'error', 
+                    'message': str(e)
+                })
 
         # Handlers de storage (core)
         @self.socketio.on('storage.get_all_for_user')

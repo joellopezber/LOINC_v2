@@ -268,7 +268,7 @@ class WebSocketService {
 
         console.debug(`🔄 Preparando request ${requestId} para evento ${event}`);
         console.debug('📤 Datos a enviar:', { ...data, install_id, request_id: requestId });
-
+        
         return new Promise((resolve, reject) => {
             const timeout = setTimeout(() => {
                 console.warn(`⏰ Timeout para evento ${event} (request_id: ${requestId})`);
@@ -284,7 +284,7 @@ class WebSocketService {
                     console.debug('✅ Request ID coincide, procesando respuesta');
                     clearTimeout(timeout);
                     this.pendingRequests.delete(requestId);
-                    
+
                     if (response.status === 'success') {
                         resolve(response);
                     } else {
