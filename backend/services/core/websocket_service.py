@@ -252,33 +252,35 @@ class WebSocketService(LazyLoadService):
                 })
 
     def handle_connect(self, sid, environ):
-        """Maneja nueva conexión WebSocket"""
-        client_info = {
-            'sid': sid,
-            'ip': environ.get('REMOTE_ADDR', 'unknown'),
-            'connected_at': time.time(),
-            'last_activity': time.time()
-        }
-        self.active_connections[sid] = client_info
-        
-        self.logger.info(
-            f"\n{'='*50}\n"
-            f"📡 Nueva conexión WebSocket  -  ID: {sid} - IP: {client_info['ip']}\n"
-            f"👥 Conexiones activas: {len(self.active_connections)}\n"
-            f"{'='*50}"
-        )
+        """Manejador de conexión de cliente WebSocket"""
+        try:
+            ip = environ.get('HTTP_X_REAL_IP', environ.get('REMOTE_ADDR', 'desconocida'))
+            self.active_connections[sid] = {
+                'ip': ip,
+                'connected_at': time.time(),
+                'last_activity': time.time()
+            }
+            
+            log_message = f"""INFO: ====================👥 Conexiones activas: {len(self.active_connections)}====================
+📡 Nueva conexión WebSocket  -  ID: {sid} - IP: {ip}
+============================================================================\n"""
+            logger.info(log_message)
 
+        except Exception as e:
+            logger.error(f"❌ Error en handle_connect: {e}")
+            
     def handle_disconnect(self, sid):
-        """Maneja desconexión WebSocket"""
-        if sid in self.active_connections:
-            client = self.active_connections[sid]
-            self.logger.info(
-                f"\n{'='*50}\n"
-                f"👋 Desconexión WebSocket  -  ID: {sid} - IP: {client['ip']}\n"
-                f"👥 Conexiones activas: {len(self.active_connections) - 1}\n"
-                f"{'='*50}"
-            )
-            del self.active_connections[sid]
+        """Manejador de desconexión de cliente WebSocket"""
+        try:
+            if sid in self.active_connections:
+                del self.active_connections[sid]
+            
+            log_message = f"""====================👥 Conexiones activas: {len(self.active_connections)}====================
+👋 Desconexión WebSocket  -  ID: {sid}
+============================================================================\n"""
+            logger.info(log_message)
+        except Exception as e:
+            logger.error(f"❌ Error en handle_disconnect: {e}")
 
     def handle_error(self, sid, error):
         """Maneja errores de WebSocket"""
