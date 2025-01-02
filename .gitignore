@@ -44,4 +44,12 @@ data/temp/*
 htmlcov/
 
 # Documentación generada
-docs/LOINC_SEARCH.md 
+docs/LOINC_SEARCH.md
+docs/SERVICE_BACKEND.md
+docs/STORAGE.md
+
+# Logs
+logs/
+
+# LOINC Database
+database/
