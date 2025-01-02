@@ -348,7 +348,6 @@ class StorageService(LazyLoadService):
                 logger.error("❌ No se encontraron credenciales válidas")
                 return None
 
-            logger.info("🔄 Procesando consulta OpenAI...")
             response = openai_service.process_query(
                 user_prompt=text,
                 chat_history=test_data.get('messages', []),

@@ -126,9 +126,17 @@
 
             // Mostrar códigos LOINC
             const loincCodes = document.getElementById('loincCodes');
-            loincCodes.innerHTML = data.loinc_codes.map(code => 
+            loincCodes.innerHTML = Object.entries(loinc_codes).map(([key, code]) => 
                 `<div class="loinc-code">
-                    <span class="code">${code}</span>
+                    <span class="code">${code.code}</span>
+                    <div class="loinc-details">
+                        <div>Component: ${code.component}</div>
+                        <div>Property: ${code.property}</div>
+                        <div>Time: ${code.time}</div>
+                        <div>System: ${code.system}</div>
+                        <div>Scale: ${code.scale}</div>
+                        ${code.method ? `<div>Method: ${code.method}</div>` : ''}
+                    </div>
                 </div>`
             ).join('');
 

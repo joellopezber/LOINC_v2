@@ -19,7 +19,7 @@ graph TD
     B --> B3[Storage]
     C --> C1[OpenAI]
     C --> C2[Ontology]
-    C --> C3[Database]
+    C --> C3[Database Search]
 ```
 
 ## 2. Estructura Base
@@ -38,24 +38,29 @@ class LazyLoadService:
     def initialized(self) -> bool:
         return self._initialized
     
-    @property
-    def socketio(self):
-        return self._socketio
-
-    @socketio.setter
-    def socketio(self, value):
-        self._socketio = value
-        if value and hasattr(self, 'register_handlers'):
-            self.register_handlers(value)
+    def _set_initialized(self, success: bool, error: Optional[str] = None):
+        self._initialized = success
+        self._initialization_error = error
 ```
 
-### 2.2 Decorador Lazy Load
-Para cargar dependencias bajo demanda:
+### 2.2 OnDemandHandlers
+Base para todos los handlers de servicios on-demand:
 
 ```python
-@lazy_load('service_name')
-def my_dependency(self):
-    return self._dependency
+class OnDemandHandlers:
+    def __init__(self, socketio, service_name: str):
+        self.socketio = socketio
+        self.service = service_locator.get(service_name)
+        
+    def _register_handlers(self):
+        raise NotImplementedError()
+        
+    def _emit_error(self, event: str, message: str, request_id: Optional[str] = None):
+        self.socketio.emit(event, {
+            'status': 'error',
+            'message': message,
+            'request_id': request_id
+        })
 ```
 
 ## 3. Servicios Core
@@ -65,81 +70,98 @@ Los servicios core son fundamentales y se inicializan al arrancar la aplicación
 ### 3.1 Orden de Inicialización
 
 1. **Servicios de Seguridad**:
-   - master_key_service
-   - encryption_service
+   - master_key_service (gestión de claves maestras)
+   - encryption_service (encriptación/desencriptación)
 
 2. **Servicios de Comunicación**:
-   - websocket_service
+   - websocket_service (comunicación en tiempo real)
 
 3. **Servicios de Datos**:
-   - storage_service
-
-### 3.2 Ejemplo de Servicio Core
-
-```python
-class StorageService(LazyLoadService):
-    _instance = None  # Singleton pattern
-
-    def __new__(cls):
-        if cls._instance is None:
-            cls._instance = super(StorageService, cls).__new__(cls)
-        return cls._instance
-
-    def __init__(self):
-        if hasattr(self, '_initialized'):
-            return
-        super().__init__()
-        try:
-            self.storage_data = {}
-            self._set_initialized(True)
-        except Exception as e:
-            self._set_initialized(False, str(e))
-            raise
-```
+   - storage_service (almacenamiento persistente)
 
 ## 4. Servicios On-Demand
 
-Los servicios on-demand se cargan solo cuando son necesarios.
+Los servicios on-demand se cargan solo cuando son necesarios y siguen una estructura común.
 
-### 4.1 Características
+### 4.1 Estructura de un Servicio On-Demand
 
-- Lazy loading de dependencias
-- Validación de dependencias antes de cargar
-- Registro automático de handlers
-- Singleton pattern
+Cada servicio on-demand tiene dos componentes principales:
 
-### 4.2 Ejemplo de Servicio On-Demand
-
+1. **Service Class**: Hereda de LazyLoadService
 ```python
-class OpenAIService(LazyLoadService):
-    _instance = None
-
-    def __new__(cls):
-        if cls._instance is None:
-            cls._instance = super(OpenAIService, cls).__new__(cls)
-        return cls._instance
+class MyService(LazyLoadService):
+    _instance = None  # Singleton
 
     def __init__(self):
         if hasattr(self, '_initialized'):
             return
         super().__init__()
-        try:
-            self._storage = None
-            self._set_initialized(True)
-        except Exception as e:
-            self._set_initialized(False, str(e))
-            raise
+        self._dependencies = None
+        self._set_initialized(True)
 
     @property
-    @lazy_load('storage')
-    def storage(self):
-        return self._storage
+    @lazy_load('dependency')
+    def dependency(self):
+        return self._dependency
 
-    def register_handlers(self, socketio):
-        if not socketio:
-            return
-        # Registrar handlers específicos
+    def process_query(self, user_prompt: str, install_id: str, **kwargs):
+        # Lógica específica del servicio
+        pass
 ```
+
+2. **Handlers Class**: Hereda de OnDemandHandlers
+```python
+class MyHandlers(OnDemandHandlers):
+    def __init__(self, socketio):
+        super().__init__(socketio, 'service_name')
+    
+    def _register_handlers(self):
+        @self.socketio.on('my.event')
+        def handle_event(data):
+            try:
+                # Validar datos
+                is_valid, error, request_id = self._validate_data(
+                    data, ['required_fields'], 'my.response'
+                )
+                if not is_valid:
+                    self._emit_error('my.response', error, request_id)
+                    return
+
+                # Procesar con el servicio
+                response = self.service.process_query(
+                    user_prompt=data.get('text'),
+                    install_id=data.get('install_id')
+                )
+
+                # Enviar respuesta
+                self.socketio.emit('my.response', {
+                    'status': 'success',
+                    'response': response,
+                    'request_id': request_id
+                })
+            except Exception as e:
+                self._emit_error('my.response', str(e), data.get('request_id'))
+```
+
+### 4.2 Servicios Implementados
+
+#### OpenAI Service
+- **Propósito**: Procesamiento de lenguaje natural
+- **Eventos**: 
+  - `openai.test_search` → `openai.test_result`
+- **Dependencias**: ['storage', 'encryption']
+
+#### Ontology Service
+- **Propósito**: Análisis de términos médicos
+- **Eventos**: 
+  - `ontology.search` → `ontology.result`
+- **Dependencias**: ['openai', 'storage']
+
+#### Database Search Service
+- **Propósito**: Búsqueda en base de datos LOINC
+- **Eventos**: 
+  - `database.search` → `database.result`
+- **Dependencias**: ['storage']
 
 ## 5. Service Locator
 
@@ -153,61 +175,7 @@ El ServiceLocator es el componente central que gestiona todos los servicios.
 - Registro de servicios
 - Acceso global a servicios
 
-### 5.2 Implementación
-
-```python
-class ServiceLocator:
-    def __init__(self):
-        self._services = {}
-    
-    def get(self, name: str):
-        # Intentar obtener servicio core
-        service = self._services.get(name)
-        if service:
-            return service
-            
-        # Si no existe, intentar cargar on-demand
-        if name in ['openai', 'ontology', 'database_search']:
-            return self.get_on_demand_service(name)
-```
-
-## 6. Gestión de WebSocket
-
-### 6.1 Registro de Handlers
-
-Los handlers de WebSocket se registran automáticamente cuando:
-1. El servicio recibe una instancia de socketio
-2. El servicio implementa el método register_handlers
-
-### 6.2 Ejemplo de Handlers
-
-```python
-def register_handlers(self, socketio):
-    @socketio.on('my.event')
-    def handle_event(data):
-        try:
-            # Validar datos
-            if not isinstance(data, dict):
-                raise ValueError("Invalid data format")
-
-            # Procesar evento
-            result = self.process_data(data)
-
-            # Emitir respuesta
-            socketio.emit('my.response', {
-                'status': 'success',
-                'data': result
-            })
-        except Exception as e:
-            socketio.emit('my.response', {
-                'status': 'error',
-                'message': str(e)
-            })
-```
-
-## 7. Dependencias
-
-### 7.1 Mapa de Dependencias
+### 5.2 Mapa de Dependencias
 
 ```python
 dependencies = {
@@ -217,83 +185,45 @@ dependencies = {
 }
 ```
 
-### 7.2 Validación
+## 6. Flujo de Comunicación
+
+### 6.1 Flujo Típico
+
+1. Frontend emite evento WebSocket
+2. Handler recibe el evento y valida datos
+3. Handler llama al servicio correspondiente
+4. Servicio procesa la petición usando sus dependencias
+5. Handler emite respuesta al frontend
+
+### 6.2 Manejo de Errores
+
+1. Validación de datos
+2. Verificación de dependencias
+3. Control de excepciones
+4. Respuestas estandarizadas
 
 ```python
-def validate_dependencies(self, service_name: str) -> bool:
-    required = self.dependencies.get(service_name, [])
-    return all(self.is_registered(dep) for dep in required)
+{
+    'status': 'error',
+    'message': str(error),
+    'request_id': request_id
+}
 ```
 
-## 8. Implementación de Nuevos Servicios
+## 7. Logging
 
-### 8.1 Servicio Core
+### 7.1 Niveles de Log
 
-1. Heredar de LazyLoadService
-2. Implementar patrón singleton
-3. Inicializar en ServiceLocator._init_core_services
+- **DEBUG**: Información detallada (desarrollo)
+- **INFO**: Eventos normales
+- **ERROR**: Errores recuperables
+- **CRITICAL**: Errores fatales
 
-### 8.2 Servicio On-Demand
-
-1. Heredar de LazyLoadService
-2. Implementar patrón singleton
-3. Definir dependencias en ServiceLocator
-4. Implementar register_handlers si necesita WebSocket
-
-### 8.3 Template
+### 7.2 Formato
 
 ```python
-class MyService(LazyLoadService):
-    _instance = None
-
-    def __new__(cls):
-        if cls._instance is None:
-            cls._instance = super(MyService, cls).__new__(cls)
-        return cls._instance
-
-    def __init__(self):
-        if hasattr(self, '_initialized'):
-            return
-        super().__init__()
-        try:
-            # Inicialización
-            self._set_initialized(True)
-        except Exception as e:
-            self._set_initialized(False, str(e))
-            raise
-
-    def register_handlers(self, socketio):
-        if not socketio:
-            return
-        # Implementar handlers
-
-# Instancia global
-my_service = MyService()
-```
-
-## 9. Buenas Prácticas
-
-1. **Singleton**:
-   - Usar _instance para instancia única
-   - Implementar __new__ sin parámetros
-   - Crear instancia global del servicio
-
-2. **Lazy Loading**:
-   - Usar decorador @lazy_load para dependencias
-   - No cargar servicios innecesariamente
-   - Validar dependencias antes de cargar
-
-3. **WebSocket**:
-   - Implementar register_handlers si necesario
-   - Manejar errores en handlers
-   - Usar logging para debug
-
-4. **Logging**:
-   - Usar logger específico por servicio
-   - Documentar errores y estados
-   - Usar emojis para mejor legibilidad
-
-5. **Gestión de Errores**:
-   - Capturar y loguear excepciones
-   - Establecer estados de error
-   - Propagar errores apropiadamente 
+logger.info("=" * 50)  # Separador
+logger.info("📨 Evento recibido")
+logger.info("📝 Datos: ...")
+logger.info("=" * 50)  # Separador
+``` 

@@ -1,15 +1,12 @@
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
-from cryptography.hazmat.primitives.kdf.hkdf import HKDF
+import base64
 import os
 import logging
-import base64
-import traceback
 from typing import Optional
 from ..lazy_load_service import LazyLoadService, lazy_load
 
-# Configurar logging
 logger = logging.getLogger(__name__)
 
 class EncryptionService(LazyLoadService):
@@ -58,20 +55,41 @@ class EncryptionService(LazyLoadService):
 
     def _derive_key(self, salt, master_key):
         """
-        Deriva una clave usando PBKDF2
+        Deriva una clave AES-GCM usando HKDF, siguiendo el mismo proceso que el frontend:
+        1. Importar master key como bytes
+        2. Usar HKDF para derivar una clave específica AES-GCM
         """
-        # Convertir master_key de hex a bytes
-        key_bytes = bytes.fromhex(master_key)
-        
-        # Usar PBKDF2 para derivar la clave
-        kdf = PBKDF2HMAC(
-            algorithm=hashes.SHA256(),
-            length=32,
-            salt=salt,
-            iterations=100000,
-        )
-        
-        return kdf.derive(key_bytes)
+        try:
+            from cryptography.hazmat.primitives.kdf.hkdf import HKDF
+            from cryptography.hazmat.primitives import hashes
+            from cryptography.hazmat.backends import default_backend
+            
+            # 1. Convertir master_key de hex a bytes
+            key_material = bytes.fromhex(master_key)
+            
+            # 2. Configurar HKDF con los mismos parámetros que el frontend
+            hkdf = HKDF(
+                algorithm=hashes.SHA256(),
+                length=32,  # 256 bits para AES-256-GCM
+                salt=salt,
+                info=b'',  # info vacío como en el frontend
+                backend=default_backend()
+            )
+            
+            # 3. Derivar clave específica para AES-GCM
+            key = hkdf.derive(key_material)
+            
+            # 4. Validar que la clave tenga el tamaño correcto para AES-256-GCM
+            if len(key) != 32:  # 256 bits = 32 bytes
+                logger.error("❌ Tamaño de clave incorrecto")
+                return None
+            
+            logger.info("✅ Clave derivada correctamente")
+            return key
+
+        except Exception as e:
+            logger.error(f"❌ Error derivando clave: {e}")
+            return None
 
     def encrypt(self, data: str, install_id: str) -> Optional[str]:
         """Encripta datos usando la master key"""
@@ -89,6 +107,8 @@ class EncryptionService(LazyLoadService):
 
             # Derivar clave usando PBKDF2
             key = self._derive_key(salt, master_key)
+            if not key:
+                return None
 
             # Crear cipher
             cipher = AESGCM(key)
@@ -120,28 +140,48 @@ class EncryptionService(LazyLoadService):
             if not master_key:
                 return None
 
-            # Decodificar base64
-            encrypted_data = base64.b64decode(encrypted_b64)
+            try:
+                # Decodificar base64
+                encrypted_data = base64.b64decode(encrypted_b64)
+            except Exception as e:
+                logger.error(f"❌ Error decodificando base64: {str(e)}")
+                return None
 
-            # Extraer salt, iv y contenido
-            salt = encrypted_data[:16]
-            iv = encrypted_data[16:28]
-            content = encrypted_data[28:]
+            try:
+                # Extraer salt, iv y contenido
+                salt = encrypted_data[:16]
+                iv = encrypted_data[16:28]
+                content = encrypted_data[28:]
+            except Exception as e:
+                logger.error(f"❌ Error extrayendo componentes: {str(e)}")
+                return None
 
             # Derivar clave usando PBKDF2
             key = self._derive_key(salt, master_key)
+            if not key:
+                return None
 
-            # Crear cipher
-            cipher = AESGCM(key)
+            try:
+                # Crear cipher
+                cipher = AESGCM(key)
 
-            # Desencriptar
-            decrypted = cipher.decrypt(iv, content, None)
+                # Desencriptar
+                decrypted = cipher.decrypt(iv, content, None)
+            except Exception as e:
+                logger.error(f"❌ Error en desencriptación AES-GCM: {str(e)}")
+                return None
 
-            return decrypted.decode()
+            try:
+                result = decrypted.decode()
+                logger.info("✅ Desencriptación completada")
+                return result
+            except Exception as e:
+                logger.error(f"❌ Error decodificando resultado: {str(e)}")
+                return None
 
         except Exception as e:
-            logger.error(f"❌ Error desencriptando: {e}")
+            logger.error(f"❌ Error desencriptando: {str(e)}")
             return None
 
-# Crear instancia global
+# Instancia global
 encryption_service = EncryptionService() 

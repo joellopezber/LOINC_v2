@@ -1,7 +1,7 @@
 import sqlite3
 from typing import List, Dict, Optional
 import logging
-from ..lazy_load_service import LazyLoadService
+from ...lazy_load_service import LazyLoadService
 
 logger = logging.getLogger(__name__)
 

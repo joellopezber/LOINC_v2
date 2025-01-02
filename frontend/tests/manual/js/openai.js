@@ -71,6 +71,9 @@ export class OpenAITester extends BaseTester {
             throw new Error('No se encontró install_id');
         }
 
+        // Generar request_id único
+        const request_id = Math.random().toString(36).substring(7);
+
         // Preparar payload con todos los parámetros
         const payload = {
             text: message,
@@ -78,7 +81,8 @@ export class OpenAITester extends BaseTester {
             install_id: install_id,
             model: this.config.model,
             temperature: this.config.temperature,
-            systemPrompt: this.config.systemPrompt
+            systemPrompt: this.config.systemPrompt,
+            request_id: request_id
         };
 
         // Enviar mensaje usando socket.emit

@@ -99,10 +99,6 @@ class ServiceLocator:
                 logger.error(f"❌ Dependencias no satisfechas para {name}")
                 return None
 
-            # Obtener websocket si está disponible
-            websocket = self.get('websocket')
-            socketio = websocket.socketio if websocket else None
-
             # Registrar según el tipo de servicio
             service = None
             if name == 'openai':
@@ -118,10 +114,6 @@ class ServiceLocator:
                 service = database_search_service
                 logger.debug("🔍 Cargando servicio Database")
 
-            # Configurar socketio si está disponible
-            if service and socketio:
-                service.socketio = socketio
-
             # Registrar y devolver
             if service and self.register(name, service):
                 return service
@@ -130,6 +122,38 @@ class ServiceLocator:
         except Exception as e:
             logger.error(f"❌ Error registrando servicio on-demand {name}: {e}")
             return None
+
+    def register_on_demand_handlers(self, socketio) -> None:
+        """
+        Registra los handlers para servicios on-demand
+        
+        Args:
+            socketio: Instancia de SocketIO para registrar los handlers
+        """
+        try:
+            # Registrar handlers de OpenAI
+            if self.validate_dependencies('openai'):
+                from .on_demand.handlers.openai_handlers import OpenAIHandlers
+                OpenAIHandlers(socketio)
+                logger.debug("🤖 Handlers de OpenAI registrados")
+            
+            # Registrar handlers de Ontología
+            if self.validate_dependencies('ontology'):
+                from .on_demand.handlers.ontology_handlers import OntologyHandlers
+                OntologyHandlers(socketio)
+                logger.debug("🔍 Handlers de Ontología registrados")
+            
+            # Registrar handlers de Database Search
+            if self.validate_dependencies('database_search'):
+                from .on_demand.handlers.database_search_handlers import DatabaseSearchHandlers
+                DatabaseSearchHandlers(socketio)
+                logger.debug("🔍 Handlers de Database Search registrados")
+                
+            logger.info("✅ Handlers on-demand registrados")
+            
+        except Exception as e:
+            logger.error(f"❌ Error registrando handlers on-demand: {e}")
+            raise
 
     def validate_dependencies(self, service_name: str) -> bool:
         """

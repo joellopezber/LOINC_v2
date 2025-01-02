@@ -1,109 +1,69 @@
 import logging
-from typing import Dict, Any
-from ..services.ontology_service import ontology_service
+from .base_handlers import OnDemandHandlers
 
 logger = logging.getLogger(__name__)
 
-class OntologyHandlers:
+class OntologyHandlers(OnDemandHandlers):
     """Handler para procesar mensajes de ontología"""
     
-    @staticmethod
-    def register(socketio):
+    def __init__(self, socketio):
+        logger.info("=" * 50)
+        logger.info("🔄 Inicializando OntologyHandlers")
+        super().__init__(socketio, 'ontology')
+        if not self.service:
+            logger.error("❌ No se pudo obtener el servicio de ontología")
+            return
+        logger.info("✅ OntologyHandlers inicializado")
+        logger.info("=" * 50)
+    
+    def _register_handlers(self):
         """Registra los handlers de eventos"""
+        logger.info("🔄 Registrando handlers de Ontología")
         
-        @socketio.on('ontology.search')
-        def handle_ontology_search(data):
-            logger.info("🔍 Procesando solicitud de búsqueda ontológica")
-            logger.debug(f"📥 Datos recibidos: {data}")
+        @self.socketio.on('ontology.search')
+        def handle_search(data):
+            logger.info("=" * 50)
+            logger.info("📨 Recibido ontology.search")
+            logger.info(f"📝 Término: {data.get('text', 'N/A')}")
+            logger.info(f"🔑 Install ID: {data.get('install_id', 'N/A')}")
             
             try:
-                # Validar datos
-                if not isinstance(data, dict):
-                    logger.error("❌ Datos recibidos no son un diccionario")
-                    raise ValueError("Datos recibidos no son un diccionario válido")
-
-                # Validar install_id
-                install_id = data.get('install_id')
-                logger.debug(f"🔑 Install ID recibido: {install_id}")
-                if not install_id:
-                    logger.error("❌ Falta install_id")
-                    raise ValueError("Se requiere install_id")
-
-                # Validar texto
-                text = data.get('text')
-                logger.debug(f"📝 Texto recibido: {text}")
-                if not text:
-                    logger.error("❌ Falta texto")
-                    raise ValueError("Se requiere texto para búsqueda")
-
-                # Obtener request_id
-                request_id = data.get('request_id')
-                logger.debug(f"🔍 Request ID recibido: {request_id}")
-                if not request_id:
-                    logger.error("❌ Falta request_id")
-                    raise ValueError("Se requiere request_id")
-
-                # Procesar término
-                logger.info(f"🔄 Procesando término: {text}")
-                result = ontology_service.process_term(
-                    term=text,
-                    install_id=install_id
+                # Validar datos y obtener request_id
+                is_valid, error, request_id = self._validate_data(
+                    data, ['text'], 'ontology.result'
                 )
-                logger.debug(f"✅ Resultado obtenido: {result}")
+                if not is_valid:
+                    logger.error(f"❌ Datos inválidos: {error}")
+                    self._emit_error('ontology.result', error, request_id)
+                    return
 
-                if not result:
-                    logger.error("❌ No se obtuvo resultado")
-                    raise ValueError("No se obtuvo respuesta del servicio")
+                if not self.service:
+                    logger.error("❌ Servicio de ontología no disponible")
+                    self._emit_error('ontology.result', "Servicio no disponible", request_id)
+                    return
+
+                # Procesar con Ontología
+                logger.info("🔄 Procesando término con Ontología")
+                response = self.service.process_query(
+                    user_prompt=data.get('text'),
+                    install_id=data.get('install_id', 'default')
+                )
+
+                if not response:
+                    logger.error("❌ No se obtuvo respuesta de Ontología")
+                    self._emit_error('ontology.result', "No se obtuvo respuesta de Ontología", request_id)
+                    return
 
                 # Enviar respuesta
-                logger.info(f"📤 Enviando respuesta para request_id: {request_id}")
-                response_data = {
+                logger.info("✅ Respuesta obtenida, enviando al cliente")
+                self.socketio.emit('ontology.result', {
                     'status': 'success',
-                    'query': text,
-                    'response': result,
+                    'query': data.get('text', ''),
+                    'response': response,
                     'request_id': request_id
-                }
-                logger.debug(f"📦 Datos de respuesta: {response_data}")
-                socketio.emit('ontology.search_result', response_data)
-                logger.info("✅ Respuesta enviada correctamente")
-
+                })
+                logger.info("=" * 50)
+                
             except Exception as e:
                 logger.error(f"❌ Error procesando término: {str(e)}")
-                error_response = {
-                    'status': 'error',
-                    'message': 'Error procesando término',
-                    'request_id': data.get('request_id')
-                }
-                logger.debug(f"📦 Datos de error: {error_response}")
-                socketio.emit('ontology.search_result', error_response)
-                logger.info("✅ Respuesta de error enviada")
-
-        @socketio.on('ontology.test')
-        def on_ontology_test(data):
-            """Handler para test de ontología"""
-            try:
-                # Validar datos
-                if not isinstance(data, dict):
-                    raise ValueError("Datos recibidos no son un diccionario válido")
-
-                # Validar install_id
-                install_id = data.get('install_id')
-                if not install_id:
-                    raise ValueError("Se requiere install_id")
-
-                # Procesar test
-                result = ontology_service.process_test(data, install_id)
-                
-                socketio.emit('ontology.test_result', {
-                    'status': 'success',
-                    'response': result
-                })
-                
-            except Exception as e:
-                logger.error(f"❌ Error en test ontología: {e}")
-                socketio.emit('ontology.test_result', {
-                    'status': 'error',
-                    'message': str(e)
-                })
-                
-        logger.info("✅ Handlers de ontología registrados") 
+                self._emit_error('ontology.result', str(e), data.get('request_id')) 

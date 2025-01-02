@@ -245,7 +245,14 @@ class WebSocketService {
                 reject(new Error('Timeout esperando respuesta'));
             }, event.startsWith('ontology.') ? 30000 : 5000);
 
-            this.socket.once(event + '_result', (response) => {
+            // Usar el evento de respuesta según el servicio
+            let responseEvent;
+            if (event === 'ontology.search') responseEvent = 'ontology.result';
+            else if (event === 'openai.test_search') responseEvent = 'openai.test_result';
+            else if (event === 'database.search') responseEvent = 'database.result';
+            else responseEvent = event + '_result';
+            
+            this.socket.once(responseEvent, (response) => {
                 if (response.request_id === requestId) {
                     clearTimeout(timeout);
                     this.pendingRequests.delete(requestId);

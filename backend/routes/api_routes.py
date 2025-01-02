@@ -48,19 +48,8 @@ def init_socket_routes(socketio):
         return
         
     try:
-        # Registrar handlers de OpenAI
-        openai_service = service_locator.get('openai')
-        if openai_service:
-            logger.debug("🤖 Registrando handler de OpenAI")
-            openai_service.register_handlers(socketio)
-        
-        # Registrar handlers de Ontología
-        ontology_service = service_locator.get('ontology')
-        if ontology_service:
-            logger.debug("🔍 Registrando handler de Ontología")
-            ontology_service.register_handlers(socketio)
-            
-        logger.info("✅ Rutas WebSocket registradas")
+        # Registrar handlers on-demand
+        service_locator.register_on_demand_handlers(socketio)
         _socket_routes_initialized = True
         
     except Exception as e:

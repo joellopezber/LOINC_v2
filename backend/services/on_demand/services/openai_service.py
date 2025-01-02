@@ -1,7 +1,8 @@
 import os
 import logging
+from typing import Dict, Any, List, Optional
+import openai
 from openai import OpenAI
-from typing import Optional, Dict, Any, List
 from ...lazy_load_service import LazyLoadService, lazy_load
 from ...service_locator import service_locator
 
@@ -81,24 +82,8 @@ class OpenAIService(LazyLoadService):
             logger.error(f"❌ Error obteniendo credenciales: {e}")
             return None
 
-    def initialize(self) -> bool:
-        """Inicializa el cliente OpenAI con las credenciales"""
-        try:
-            api_key = self.get_credentials()
-            if not api_key:
-                return False
-
-            self.client = OpenAI(api_key=api_key)
-            self.initialized = True
-            logger.info("✅ Cliente OpenAI inicializado")
-            return True
-
-        except Exception as e:
-            logger.error(f"❌ Error inicializando OpenAI: {e}")
-            return False
-
     def process_query(
-        self, 
+        self,
         user_prompt: str,
         install_id: str,
         chat_history: List[Dict[str, str]] = None,
@@ -108,13 +93,13 @@ class OpenAIService(LazyLoadService):
     ) -> Optional[str]:
         """Procesa una consulta con OpenAI"""
         try:
-            logger.info("🔄 Procesando consulta OpenAI")
+            logger.info(f"🔄 Procesando consulta OpenAI [modelo: {model}, temp: {temperature}]")
             
             # Obtener credenciales
             api_key = self.get_credentials(install_id)
             if not api_key:
                 return None
-
+                
             # Crear cliente con las credenciales del usuario
             client = OpenAI(api_key=api_key)
 
@@ -127,79 +112,36 @@ class OpenAIService(LazyLoadService):
                     "role": "system",
                     "content": system_prompt
                 })
-
+                
             # Añadir historial de chat
             if chat_history:
                 messages.extend(chat_history)
-
+                
             # Añadir prompt actual
             messages.append({
                 "role": "user",
                 "content": user_prompt
             })
-
+            
             # Realizar llamada a OpenAI
             response = client.chat.completions.create(
                 model=model,
                 messages=messages,
                 temperature=temperature
             )
-
+            
             # Extraer respuesta
             if not response.choices:
                 logger.error("❌ No se obtuvo respuesta de OpenAI")
                 return None
-
+                
             result = response.choices[0].message.content
-            logger.info("✅ Respuesta obtenida")
             
             return result
-
+            
         except Exception as e:
             logger.error(f"❌ Error procesando consulta: {e}")
             return None
-
-    def register_handlers(self, socketio):
-        """Registra los handlers de eventos para OpenAI"""
-        if not socketio:
-            return
-            
-        logger.debug("🤖 Registrando handlers OpenAI")
-        
-        @socketio.on('openai.test')
-        def handle_test(data):
-            try:
-                # Validar datos
-                if not isinstance(data, dict):
-                    logger.error("❌ Datos inválidos para test")
-                    emit('openai.test_result', {
-                        'status': 'error',
-                        'message': 'Datos inválidos'
-                    })
-                    return
-
-                # Procesar test
-                result = self.process_test(data)
-                if not result:
-                    logger.error("❌ Error procesando test")
-                    emit('openai.test_result', {
-                        'status': 'error',
-                        'message': 'Error procesando test'
-                    })
-                    return
-
-                # Emitir resultado
-                emit('openai.test_result', {
-                    'status': 'success',
-                    'data': result
-                })
-
-            except Exception as e:
-                logger.error(f"❌ Error en test: {str(e)}")
-                emit('openai.test_result', {
-                    'status': 'error',
-                    'message': str(e)
-                })
 
 # Instancia del servicio
 openai_service = OpenAIService() 

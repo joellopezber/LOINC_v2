@@ -1,31 +1,11 @@
-# Este archivo puede estar vacío por ahora
-# Los handlers se importarán directamente cuando se necesiten
-
+from .base_handlers import OnDemandHandlers
 from .openai_handlers import OpenAIHandlers
 from .ontology_handlers import OntologyHandlers
-from .database_handlers import DatabaseHandlers
+from .database_search_handlers import DatabaseSearchHandlers
 
-class OnDemandHandlers:
-    """Clase base para handlers on-demand"""
-    
-    @staticmethod
-    def register_openai(socketio):
-        """Registra solo el handler de OpenAI"""
-        OpenAIHandlers.register(socketio)
-        
-    @staticmethod
-    def register_ontology(socketio):
-        """Registra solo el handler de Ontology"""
-        OntologyHandlers.register(socketio)
-        
-    @staticmethod
-    def register_database(socketio):
-        """Registra solo el handler de Database"""
-        DatabaseHandlers.register(socketio)
-        
-    @staticmethod
-    def register_all(socketio):
-        """Registra todos los handlers (usar con precaución)"""
-        OnDemandHandlers.register_openai(socketio)
-        OnDemandHandlers.register_ontology(socketio)
-        OnDemandHandlers.register_database(socketio)
+__all__ = [
+    'OnDemandHandlers',
+    'OpenAIHandlers',
+    'OntologyHandlers',
+    'DatabaseSearchHandlers'
+]

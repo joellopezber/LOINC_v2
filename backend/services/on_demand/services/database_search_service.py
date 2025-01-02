@@ -24,7 +24,6 @@ class DatabaseSearchService(LazyLoadService):
             return
             
         super().__init__()
-        logger.info("🔍 Inicializando DatabaseSearchService")
         
         try:
             self._elastic_service = None
