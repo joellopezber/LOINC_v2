@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Search Service</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="../css/test-styles.css">
+</head>
+<body>
+    <div class="container">
+        <a href="/tests/index.html" class="back-link">← Volver a Tests</a>
+        <h1>Test Search Service</h1>
+        
+        <div class="status-section">
+            <div class="status-item">
+                <span class="status-label">Estado WebSocket:</span>
+                <span id="connectionStatus" class="connectionStatus disconnected">Desconectado</span>
+            </div>
+            <div class="status-item">
+                <span class="status-label">Installation Time:</span>
+                <span id="installTimeDisplay">Cargando...</span>
+            </div>
+        </div>
+
+        <!-- Monitor de Servicios -->
+        <div class="section">
+            <div class="section-title">Estado de Servicios</div>
+            <div class="tag-list">
+                <div class="section" style="flex: 1;">
+                    <div class="section-title">Elasticsearch</div>
+                    <div id="elasticStatus" class="status-item">
+                        <span class="connectionStatus disconnected">Verificando...</span>
+                    </div>
+                    <div class="tag-list">
+                        <div class="tag">
+                            <span class="status-label">Documentos:</span>
+                            <span id="elasticDocs">-</span>
+                        </div>
+                        <div class="tag">
+                            <span class="status-label">Peticiones:</span>
+                            <span id="elasticRequests">-</span>
+                        </div>
+                        <div class="tag">
+                            <span class="status-label">Errores:</span>
+                            <span id="elasticErrors">-</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="section" style="flex: 1;">
+                    <div class="section-title">SQLite</div>
+                    <div id="sqlStatus" class="status-item">
+                        <span class="connectionStatus disconnected">Verificando...</span>
+                    </div>
+                    <div class="tag-list">
+                        <div class="tag">
+                            <span class="status-label">Documentos:</span>
+                            <span id="sqlDocs">-</span>
+                        </div>
+                        <div class="tag">
+                            <span class="status-label">Peticiones:</span>
+                            <span id="sqlRequests">-</span>
+                        </div>
+                        <div class="tag">
+                            <span class="status-label">Errores:</span>
+                            <span id="sqlErrors">-</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Configuración Actual -->
+        <div class="section">
+            <div class="section-title">Configuración Actual</div>
+            <div class="tag-list">
+                <div class="section" style="flex: 1;">
+                    <div class="section-title">Servicio Activo</div>
+                    <div id="activeService" class="loinc-code">-</div>
+                </div>
+                <div class="section" style="flex: 1;">
+                    <div class="section-title">Configuración de Búsqueda</div>
+                    <pre id="searchConfig" class="json-viewer">-</pre>
+                </div>
+            </div>
+        </div>
+
+        <div class="search-container">
+            <input type="text" id="searchInput" class="input" placeholder="Introduce un término LOINC..." />
+            <button id="searchButton" class="button">Buscar</button>
+        </div>
+
+        <!-- Información de Búsqueda -->
+        <div id="searchInfo" class="section" style="display: none;">
+            <div class="section-title">Última Búsqueda</div>
+            <div class="tag-list">
+                <div class="tag">
+                    <span class="status-label">Servicio:</span>
+                    <span id="searchService">-</span>
+                </div>
+                <div class="tag">
+                    <span class="status-label">Tiempo:</span>
+                    <span id="searchTime">-</span>
+                </div>
+                <div class="tag">
+                    <span class="status-label">Resultados:</span>
+                    <span id="searchCount">-</span>
+                </div>
+            </div>
+        </div>
+
+        <div id="results" class="results">
+            <div id="resultsList"></div>
+            
+            <div class="section">
+                <div class="section-title">Respuesta JSON completa</div>
+                <pre id="jsonViewer" class="json-viewer"></pre>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.min.js"></script>
+    <script type="module">
+        import { SearchDBTester } from '../js/searchdb.js';
+
+        // Referencias DOM
+        const searchInput = document.getElementById('searchInput');
+        const searchButton = document.getElementById('searchButton');
+        const resultsContainer = document.getElementById('results');
+        const resultsList = document.getElementById('resultsList');
+        const connectionStatus = document.getElementById('connectionStatus');
+        const searchInfo = document.getElementById('searchInfo');
+
+        // Inicializar Search Tester
+        const tester = new SearchDBTester();
+
+        // Función para actualizar estado de servicios
+        function updateServiceStatus(status) {
+            if (!status?.services) return;
+
+            // Elasticsearch
+            const elastic = status.services.elastic;
+            const elasticStatus = document.getElementById('elasticStatus');
+            const elasticDocs = document.getElementById('elasticDocs');
+            const elasticRequests = document.getElementById('elasticRequests');
+            const elasticErrors = document.getElementById('elasticErrors');
+
+            elasticStatus.innerHTML = `
+                <span class="connectionStatus ${elastic.available ? 'connected' : 'disconnected'}">
+                    ${elastic.available ? 'Disponible' : 'No disponible'}
+                </span>
+            `;
+            if (elastic.stats) {
+                elasticDocs.textContent = elastic.stats.doc_count || 0;
+                elasticRequests.textContent = elastic.stats.requests || 0;
+                elasticErrors.textContent = elastic.stats.errors || 0;
+            }
+
+            // SQLite
+            const sql = status.services.sql;
+            const sqlStatus = document.getElementById('sqlStatus');
+            const sqlDocs = document.getElementById('sqlDocs');
+            const sqlRequests = document.getElementById('sqlRequests');
+            const sqlErrors = document.getElementById('sqlErrors');
+
+            sqlStatus.innerHTML = `
+                <span class="connectionStatus ${sql.available ? 'connected' : 'disconnected'}">
+                    ${sql.available ? 'Disponible' : 'No disponible'}
+                </span>
+            `;
+            if (sql.stats) {
+                sqlDocs.textContent = sql.stats.doc_count || 0;
+                sqlRequests.textContent = sql.stats.requests || 0;
+                sqlErrors.textContent = sql.stats.errors || 0;
+            }
+
+            // Configuración
+            if (status.user_config) {
+                document.getElementById('activeService').textContent = 
+                    status.user_config.search?.dbMode || 'sql';
+                document.getElementById('searchConfig').textContent = 
+                    JSON.stringify(status.user_config, null, 2);
+            }
+        }
+
+        // Función para mostrar resultados
+        function displayResults(data) {
+            resultsContainer.classList.add('visible');
+            console.log('Datos recibidos:', data);
+
+            if (!data || !data.results) {
+                displayError('Respuesta inválida del servidor');
+                return;
+            }
+
+            // Actualizar información de búsqueda
+            searchInfo.style.display = 'block';
+            document.getElementById('searchService').textContent = data.service || '-';
+            document.getElementById('searchTime').textContent = new Date().toLocaleTimeString();
+            document.getElementById('searchCount').textContent = data.count || 0;
+            
+            // Mostrar resultados
+            resultsList.innerHTML = data.results.map(result => `
+                <div class="loinc-code">
+                    <span class="code">${result.loinc_num || 'Sin código'}</span>
+                    <span class="description">${result.component} - ${result.system}</span>
+                </div>
+            `).join('');
+
+            // Mostrar JSON completo
+            document.getElementById('jsonViewer').textContent = 
+                JSON.stringify(data, null, 2);
+        }
+
+        // Función para mostrar errores
+        function displayError(message) {
+            resultsContainer.classList.add('visible');
+            resultsContainer.innerHTML = `<div class="error">${message}</div>`;
+        }
+
+        // Configurar callbacks
+        tester.onConnectionChange = (isConnected) => {
+            connectionStatus.className = `connectionStatus ${isConnected ? 'connected' : 'disconnected'}`;
+            connectionStatus.textContent = isConnected ? 'Conectado' : 'Desconectado';
+            searchInput.disabled = !isConnected;
+            searchButton.disabled = !isConnected;
+
+            if (isConnected) {
+                // Obtener estado inicial
+                tester.getServiceStatus().then(updateServiceStatus);
+            }
+        };
+
+        tester.onSearchResult = (results) => {
+            displayResults(results);
+        };
+
+        tester.onStatusUpdate = (status) => {
+            updateServiceStatus(status);
+        };
+
+        tester.onError = (error) => {
+            displayError(error.message);
+        };
+
+        // Manejar búsqueda
+        async function handleSearch() {
+            const query = searchInput.value.trim();
+            if (!query) return;
+
+            try {
+                searchInput.disabled = true;
+                searchButton.disabled = true;
+                resultsContainer.classList.remove('visible');
+
+                await tester.search(query);
+            } catch (error) {
+                console.error('Error al buscar:', error);
+                displayError(error.message);
+            } finally {
+                searchInput.disabled = false;
+                searchButton.disabled = false;
+            }
+        }
+
+        // Event listeners
+        searchButton.addEventListener('click', handleSearch);
+        searchInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                handleSearch();
+            }
+        });
+
+        // Conectar al iniciar
+        document.addEventListener('DOMContentLoaded', () => {
+            console.log('🚀 Iniciando aplicación...');
+            const installTime = localStorage.getItem('installTimestamp') || 'No disponible';
+            document.getElementById('installTimeDisplay').textContent = installTime;
+            console.log('⏰ Installation Time:', installTime);
+            tester.connect();
+        });
+    </script>
+</body>
+</html> 

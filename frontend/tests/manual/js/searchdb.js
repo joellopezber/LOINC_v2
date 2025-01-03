@@ -4,105 +4,172 @@ export class SearchDBTester extends BaseTester {
     constructor() {
         super();
         console.log('🏗️ Inicializando SearchDBTester');
+        this.service = null;
+        this.unsubscribe = null;
         this.onSearchResult = null;
+        this.onStatusUpdate = null;
+        this.testResults = new Map();
+        
+        // Iniciar el proceso de inicialización inmediatamente
+        this._initializationPromise = this._initializeService().catch(error => {
+            console.error('❌ Error en inicialización automática:', error);
+            this.onError?.(error);
+            throw error;
+        });
     }
 
     async initialize() {
-        // Configurar listeners específicos
-        this._ws.on('search_result', (data) => {
-            console.log('📩 Resultado de búsqueda recibido:', {
-                timestamp: new Date().toISOString(),
-                data: JSON.stringify(data, null, 2)
-            });
-            this.onSearchResult?.(data);
-        });
+        try {
+            console.log('🔄 Iniciando inicialización del tester');
+            await this._initializationPromise;
+            console.log('✅ Tester inicializado correctamente');
+        } catch (error) {
+            console.error('❌ Error inicializando tester:', error);
+            this.onError?.(error);
+            throw error;
+        }
+    }
 
-        // Monitorizar todos los eventos
-        this._ws.onAny((eventName, ...args) => {
-            console.log('🎯 Evento recibido:', {
-                timestamp: new Date().toISOString(),
-                event: eventName,
-                args: args
-            });
+    async _initializeService() {
+        const { databaseSearchService } = await import('/static/js/services/database.search.service.js');
+        this.service = databaseSearchService;
+
+        this.unsubscribe = this.service.addListener((response) => {
+            console.log('📩 Tester recibió respuesta:', response);
+            
+            if (response.status === 'success') {
+                if ('service_status' in response) {
+                    console.log('📊 Estado del servicio recibido');
+                    this.onStatusUpdate?.(response.service_status);
+                } else if ('test_id' in response) {
+                    console.log('🧪 Resultado de test recibido');
+                    this.handleTestResult(response.test_id, response);
+                } else {
+                    console.log('✅ Resultado de búsqueda recibido');
+                    this.onSearchResult?.(response);
+                }
+            } else {
+                console.error('❌ Error en respuesta:', response.message);
+                this.onError?.(new Error(response.message));
+            }
         });
+    }
+
+    async _ensureServiceInitialized() {
+        if (!this._initializationPromise) {
+            throw new Error('El tester no ha sido inicializado');
+        }
+        await this._initializationPromise;
+        if (!this.service) {
+            throw new Error('El servicio no está disponible');
+        }
     }
 
     async search(query) {
-        if (!this.isConnected) {
-            console.error('❌ Intento de búsqueda sin conexión');
-            throw new Error('No hay conexión con el servidor');
+        try {
+            await this._ensureServiceInitialized();
+            if (!this.isConnected) {
+                throw new Error('No hay conexión con el servidor');
+            }
+
+            console.log('🔍 Tester: Iniciando búsqueda:', query);
+            await this.service.search(query);
+            console.log('✅ Tester: Búsqueda enviada');
+        } catch (error) {
+            console.error('❌ Tester: Error en búsqueda:', error);
+            this.onError?.(error);
+            throw error;
         }
-
-        const searchData = {
-            query,
-            user_id: this._ws.getSocketId(),
-            timestamp: new Date().toISOString()
-        };
-
-        console.log('🔍 Iniciando búsqueda:', searchData);
-
-        return new Promise((resolve, reject) => {
-            console.log('📤 Emitiendo evento search');
-            this._ws.sendRequest('search', searchData).then(response => {
-                console.log('📩 Respuesta recibida:', {
-                    timestamp: new Date().toISOString(),
-                    status: response?.status,
-                    response: JSON.stringify(response, null, 2)
-                });
-
-                if (response?.status === 'success') {
-                    console.log('✅ Búsqueda exitosa');
-                    this.onSearchResult?.(response);
-                    resolve(response);
-                } else {
-                    console.error('❌ Error en búsqueda:', response?.message || 'Error desconocido');
-                    const error = new Error(response?.message || 'Error desconocido');
-                    this.onError?.(error);
-                    reject(error);
-                }
-            }).catch(error => {
-                console.error('❌ Error en búsqueda:', error);
-                this.onError?.(error);
-                reject(error);
-            });
-        });
     }
 
-    setPreferredService(service) {
-        if (!this.isConnected) {
-            console.error('❌ Intento de configuración sin conexión');
-            throw new Error('No hay conexión con el servidor');
+    async runTest(testCase) {
+        try {
+            await this._ensureServiceInitialized();
+            if (!this.isConnected) {
+                throw new Error('No hay conexión con el servidor');
+            }
+
+            const testId = `test_${Date.now()}`;
+            console.log(`🧪 Iniciando test ${testId}:`, testCase);
+
+            this.testResults.set(testId, {
+                status: 'running',
+                startTime: Date.now(),
+                testCase
+            });
+
+            await this.service.runTest({
+                test_id: testId,
+                ...testCase
+            });
+
+            return testId;
+
+        } catch (error) {
+            console.error('❌ Error ejecutando test:', error);
+            this.onError?.(error);
+            throw error;
+        }
+    }
+
+    handleTestResult(testId, response) {
+        const testInfo = this.testResults.get(testId);
+        if (!testInfo) {
+            console.warn('⚠️ Resultado recibido para test desconocido:', testId);
+            return;
         }
 
-        console.log('⚙️ Configurando servicio:', {
-            timestamp: new Date().toISOString(),
-            service: service,
-            socketId: this._ws.getSocketId()
-        });
+        testInfo.endTime = Date.now();
+        testInfo.duration = testInfo.endTime - testInfo.startTime;
 
-        return new Promise((resolve, reject) => {
-            console.log('📤 Emitiendo evento set_preferred_service');
-            this._ws.sendRequest('set_preferred_service', { service }).then(response => {
-                console.log('📩 Respuesta de configuración:', {
-                    timestamp: new Date().toISOString(),
-                    status: response?.status,
-                    response: JSON.stringify(response, null, 2)
-                });
+        if (response?.status === 'success') {
+            testInfo.status = 'passed';
+            testInfo.result = response.response;
+            console.log(`✅ Test ${testId} completado en ${testInfo.duration}ms:`, response.response);
+        } else {
+            testInfo.status = 'failed';
+            testInfo.error = response.message || 'Error desconocido';
+            console.error(`❌ Test ${testId} falló en ${testInfo.duration}ms:`, testInfo.error);
+        }
 
-                if (response?.status === 'success') {
-                    console.log('✅ Configuración exitosa');
-                    resolve(response);
-                } else {
-                    console.error('❌ Error en configuración:', response?.message || 'Error al configurar servicio');
-                    const error = new Error(response?.message || 'Error al configurar servicio');
-                    this.onError?.(error);
-                    reject(error);
-                }
-            }).catch(error => {
-                console.error('❌ Error en configuración:', error);
-                this.onError?.(error);
-                reject(error);
-            });
-        });
+        // Notificar resultado
+        this.onTestComplete?.(testId, testInfo);
+    }
+
+    async getServiceStatus() {
+        try {
+            await this._ensureServiceInitialized();
+            if (!this.isConnected) {
+                throw new Error('No hay conexión con el servidor');
+            }
+
+            return this.service.getStatus();
+        } catch (error) {
+            console.error('❌ Error obteniendo estado:', error);
+            this.onError?.(error);
+            throw error;
+        }
+    }
+
+    getTestResults() {
+        return Array.from(this.testResults.entries()).map(([id, info]) => ({
+            id,
+            ...info
+        }));
+    }
+
+    clearTestResults() {
+        this.testResults.clear();
+    }
+
+    disconnect() {
+        console.log('🧹 SearchDBTester: Limpiando recursos');
+        if (this.unsubscribe) {
+            this.unsubscribe();
+            this.unsubscribe = null;
+        }
+        this.service = null;
+        this.testResults.clear();
+        super.disconnect();
     }
 } 

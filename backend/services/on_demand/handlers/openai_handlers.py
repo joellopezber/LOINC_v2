@@ -7,14 +7,12 @@ class OpenAIHandlers(OnDemandHandlers):
     """Handler para procesar mensajes con OpenAI"""
     
     def __init__(self, socketio):
-        logger.info("=" * 50)
         logger.info("🔄 Inicializando OpenAIHandlers")
         super().__init__(socketio, 'openai')
         if not self.service:
             logger.error("❌ No se pudo obtener el servicio de OpenAI")
             return
         logger.info("✅ OpenAIHandlers inicializado")
-        logger.info("=" * 50)
     
     def _register_handlers(self):
         """Registra los handlers de eventos"""
@@ -22,7 +20,6 @@ class OpenAIHandlers(OnDemandHandlers):
         
         @self.socketio.on('openai.test_search')
         def handle_chat_message(data):
-            logger.info("=" * 50)
             logger.info("📨 Recibido openai.test_search")
             logger.info(f"📝 Mensaje: {data.get('text', 'N/A')}")
             logger.info(f"🔑 Install ID: {data.get('install_id', 'N/A')}")

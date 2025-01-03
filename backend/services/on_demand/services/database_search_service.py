@@ -1,16 +1,16 @@
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Any
 import logging
-import time
+from ...lazy_load_service import LazyLoadService, lazy_load
 from .elastic_service import ElasticService
 from .sql_service import SQLService
-from ...service_locator import service_locator
-from ...lazy_load_service import LazyLoadService, lazy_load
+from ...core.storage_service import storage_service
 import json
 
-# Configurar logging
 logger = logging.getLogger(__name__)
 
 class DatabaseSearchService(LazyLoadService):
+    """Servicio para gestionar búsquedas en diferentes bases de datos"""
+    
     _instance = None
 
     def __new__(cls):
@@ -19,16 +19,19 @@ class DatabaseSearchService(LazyLoadService):
         return cls._instance
 
     def __init__(self):
-        """Inicializa los servicios de búsqueda en base de datos de forma lazy"""
+        """Inicializa el servicio de búsqueda en base de datos"""
         if hasattr(self, '_initialized'):
             return
             
         super().__init__()
+        logger.info("🔄 Inicializando Database Search Service")
         
         try:
             self._elastic_service = None
             self._sql_service = None
             self._storage = None
+            self._websocket = None
+            self._listeners = set()
             self._default_service = 'sql'
             self._service_stats = {
                 'elastic': {
@@ -55,6 +58,12 @@ class DatabaseSearchService(LazyLoadService):
         return self._storage
 
     @property
+    @lazy_load('websocket')
+    def websocket(self):
+        """Obtiene el WebSocketService de forma lazy"""
+        return self._websocket
+
+    @property
     def elastic_service(self):
         """Obtiene ElasticService de forma lazy"""
         if self._elastic_service is None:
@@ -78,6 +87,43 @@ class DatabaseSearchService(LazyLoadService):
             logger.debug("✅ SQLService cargado")
         return self._sql_service
 
+    def addListener(self, callback):
+        """Agrega un listener para recibir actualizaciones"""
+        self._listeners.add(callback)
+        return lambda: self._listeners.remove(callback)
+
+    def _notify_listeners(self, data):
+        """Notifica a todos los listeners registrados"""
+        for callback in self._listeners:
+            try:
+                callback(data)
+            except Exception as e:
+                logger.error(f"❌ Error en listener: {e}")
+
+    def get_user_preference(self, user_id: str) -> str:
+        """
+        Obtiene el servicio preferido de un usuario.
+        """
+        try:
+            if not self.storage:
+                logger.error("❌ Storage service no disponible")
+                return self._default_service
+
+            # Obtener y validar configuración
+            search_config = self.storage.get_value('searchConfig', user_id) or {}
+            service = search_config.get('search', {}).get('dbMode', self._default_service)
+            
+            if service not in ['elastic', 'sql']:
+                logger.warning(f"⚠️ Servicio '{service}' inválido, usando '{self._default_service}'")
+                return self._default_service
+
+            logger.debug(f"⚙️ Servicio configurado: {service}")
+            return service
+
+        except Exception as e:
+            logger.error(f"❌ Error obteniendo preferencia: {e}")
+            return self._default_service
+
     def search_loinc(self, query: str, user_id: str, limit: int = 10) -> Dict:
         """
         Realiza una búsqueda usando el servicio configurado por el usuario.
@@ -89,8 +135,8 @@ class DatabaseSearchService(LazyLoadService):
 
             # 1. Validación inicial
             logger.info("\n🔍 BÚSQUEDA LOINC")
-            logger.info("├── Query: %s", query)
-            logger.info("└── Usuario: %s", user_id)
+            logger.info(f"├── Query: {query}")
+            logger.info(f"└── Usuario: {user_id}")
             
             if not self.storage:
                 logger.error("❌ Storage service no disponible")
@@ -99,9 +145,9 @@ class DatabaseSearchService(LazyLoadService):
             # 2. Configuración
             service = self.get_user_preference(user_id)
             logger.info("\n⚙️ CONFIGURACIÓN")
-            logger.info("├── Servicio: %s", service)
+            logger.info(f"├── Servicio: {service}")
             
-            search_config = self.storage.get_value('searchConfig') or {}
+            search_config = self.storage.get_value('searchConfig', user_id) or {}
             config = {
                 'search': search_config.get('search', {}),
                 'elastic': search_config.get('elastic', {}),
@@ -127,26 +173,27 @@ class DatabaseSearchService(LazyLoadService):
                     results = self.sql_service.search_loinc(query, limit)
                     
                 logger.info("├── Estado: ✅ Completada")
-                logger.info("└── Resultados: %d", len(results))
+                logger.info(f"└── Resultados: {len(results)}")
                 
             except Exception as e:
                 error = str(e)
                 self._service_stats[service]['errors'] += 1
-                logger.error("├── Estado: ❌ Error: %s", e)
+                logger.error(f"├── Estado: ❌ Error: {e}")
                 
                 # Fallback
                 fallback_service = 'sql' if service == 'elastic' else 'elastic'
-                logger.info("└── Intentando fallback: %s", fallback_service)
+                logger.info(f"└── Intentando fallback: {fallback_service}")
                 try:
                     if fallback_service == 'elastic' and self.elastic_service:
                         results = self.elastic_service.search_loinc(query, limit)
                     elif fallback_service == 'sql' and self.sql_service:
                         results = self.sql_service.search_loinc(query, limit)
                 except Exception as fallback_error:
-                    logger.error("    └── ❌ Error en fallback: %s", fallback_error)
+                    logger.error(f"    └── ❌ Error en fallback: {fallback_error}")
 
-            # 4. Respuesta
+            # 4. Notificar resultado
             response = {
+                'status': 'success' if not error else 'error',
                 'results': results,
                 'count': len(results),
                 'service': service,
@@ -154,40 +201,25 @@ class DatabaseSearchService(LazyLoadService):
                 'config': config
             }
             
+            self._notify_listeners(response)
+            
             if error:
                 logger.info("\n📤 RESPUESTA (con errores)")
             else:
                 logger.info("\n📤 RESPUESTA")
-                logger.debug("└── %s", json.dumps(response, indent=2))
+                logger.debug(f"└── {json.dumps(response, indent=2)}")
             return response
 
         except Exception as e:
-            logger.error("❌ Error general: %s", e)
-            return {'error': str(e)}
-
-    def get_user_preference(self, user_id: str) -> str:
-        """
-        Obtiene el servicio preferido de un usuario.
-        """
-        try:
-            if not self.storage:
-                logger.error("❌ Storage service no disponible")
-                return self._default_service
-
-            # Obtener y validar configuración
-            search_config = self.storage.get_value('searchConfig') or {}
-            service = search_config.get('search', {}).get('dbMode', self._default_service)
-            
-            if service not in ['elastic', 'sql']:
-                logger.warning("⚠️ Servicio '%s' inválido, usando '%s'", service, self._default_service)
-                return self._default_service
-
-            logger.debug("⚙️ Servicio configurado: %s", service)
-            return service
-
-        except Exception as e:
-            logger.error("❌ Error obteniendo preferencia: %s", e)
-            return self._default_service
+            logger.error(f"❌ Error general: {e}")
+            error_response = {
+                'status': 'error',
+                'error': str(e),
+                'results': [],
+                'count': 0
+            }
+            self._notify_listeners(error_response)
+            return error_response
 
     def get_service_status(self, user_id: str = None) -> Dict:
         """
@@ -202,7 +234,7 @@ class DatabaseSearchService(LazyLoadService):
         
         # Si tenemos usuario, obtener su configuración
         if user_id and self.storage:
-            search_config = self.storage.get_value('searchConfig') or {}
+            search_config = self.storage.get_value('searchConfig', user_id) or {}
             status['user_config'] = {
                 'search': search_config.get('search', {}),
                 'elastic': search_config.get('elastic', {}),
@@ -239,33 +271,64 @@ class DatabaseSearchService(LazyLoadService):
 
         return status
 
-    def bulk_insert_docs(self, docs: List[Dict], user_id: str) -> Dict:
+    def run_test(self, test_data: Dict) -> Dict:
         """
-        Inserta documentos usando el servicio configurado por el usuario.
-        
-        Args:
-            docs: Lista de diccionarios con datos LOINC
-            user_id: Identificador del usuario
-            
-        Returns:
-            Estado de la inserción
+        Ejecuta un test específico en el servicio de base de datos.
         """
-        if not self.storage:
-            return {'success': False, 'error': 'Storage service no disponible'}
-            
-        service = self.get_user_preference(user_id)
-        status = {'success': False, 'error': None, 'service': service}
-        
         try:
-            if service == 'elastic':
-                status['success'] = self.elastic_service.bulk_insert_docs(docs)
-            else:  # sql
-                status['success'] = self.sql_service.bulk_insert_docs(docs)
-        except Exception as e:
-            status['error'] = str(e)
-            logger.error(f"Error en inserción con {service}: {e}")
+            logger.info("\n🧪 EJECUTANDO TEST")
+            logger.info(f"├── Test ID: {test_data.get('test_id')}")
             
-        return status 
+            test_type = test_data.get('type', 'search')
+            test_params = test_data.get('params', {})
+            
+            results = {
+                'test_id': test_data.get('test_id'),
+                'type': test_type,
+                'success': False,
+                'data': None,
+                'error': None
+            }
+            
+            if test_type == 'search':
+                # Test de búsqueda
+                search_results = self.search_loinc(
+                    query=test_params.get('query', ''),
+                    user_id=test_params.get('user_id', 'test'),
+                    limit=test_params.get('limit', 10)
+                )
+                results['data'] = search_results
+                results['success'] = search_results is not None
+                
+            elif test_type == 'service_status':
+                # Test de estado del servicio
+                status = self.get_service_status(test_params.get('user_id'))
+                results['data'] = status
+                results['success'] = True
+                
+            elif test_type == 'service_switch':
+                # Test de cambio de servicio
+                service = test_params.get('service')
+                if service not in ['elastic', 'sql']:
+                    raise ValueError(f"Servicio inválido: {service}")
+                    
+                results['data'] = {'service': service}
+                results['success'] = True
+                
+            else:
+                raise ValueError(f"Tipo de test no soportado: {test_type}")
+            
+            logger.info("├── Estado: ✅ Test completado")
+            logger.info(f"└── Resultado: {results}")
+            return results
+            
+        except Exception as e:
+            logger.error(f"❌ Error ejecutando test: {e}")
+            return {
+                'test_id': test_data.get('test_id'),
+                'success': False,
+                'error': str(e)
+            }
 
 # Instancia global
 database_search_service = DatabaseSearchService() 

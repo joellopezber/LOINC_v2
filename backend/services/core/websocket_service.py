@@ -261,7 +261,7 @@ class WebSocketService(LazyLoadService):
                 'last_activity': time.time()
             }
             
-            log_message = f"""INFO: ====================👥 Conexiones activas: {len(self.active_connections)}====================
+            log_message = f"""INFO: ====================👥 Conexiones activas: {len(self.active_connections)} ===================
 📡 Nueva conexión WebSocket  -  ID: {sid} - IP: {ip}
 ============================================================================\n"""
             logger.info(log_message)
@@ -275,7 +275,7 @@ class WebSocketService(LazyLoadService):
             if sid in self.active_connections:
                 del self.active_connections[sid]
             
-            log_message = f"""====================👥 Conexiones activas: {len(self.active_connections)}====================
+            log_message = f"""====================👥 Conexiones activas: {len(self.active_connections)} ===================
 👋 Desconexión WebSocket  -  ID: {sid}
 ============================================================================\n"""
             logger.info(log_message)
